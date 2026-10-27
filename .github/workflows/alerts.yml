@@ -34,7 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The newest commit of the branch, not the one from when this run was requested: a queued run
+      # must see the job list saved by the run before it, or the two versions clash when pushing.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -73,8 +77,9 @@ jobs:
             git push origin "HEAD:${{ github.ref_name }}"
           fi
 
+      # Only remember what was read if the job list was saved too; otherwise the next run reads it again.
       - uses: actions/cache/save@v4
-        if: always() && hashFiles('alerts/state.json') != ''
+        if: success() && hashFiles('alerts/state.json') != ''
         with:
           path: alerts/state.json
           key: alerts-state-${{ github.run_id }}
