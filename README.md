@@ -115,9 +115,8 @@ Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked)
 ## Deployment notes
 
 * **Frontend on GitHub Pages:** the frontend is a static export, and `.github/workflows/pages.yml` builds and deploys it on every push to `main` (or this repo's default branch) that touches `frontend/`. One-time setup:
-  1. Deploy the backend somewhere with HTTPS first (GitHub Pages can't run Python; see Backend below).
-  2. Repo **Settings → Secrets and variables → Actions → Variables**: add `API_URL` = your backend's `https://…` URL (no trailing slash).
-  3. Repo **Settings → Pages → Source: GitHub Actions**.
+  1. Repo **Settings → Pages → Source: GitHub Actions**. With nothing else configured the site deploys in **demo mode** (sample data, a banner says so).
+  2. For real data: deploy the backend somewhere with HTTPS (GitHub Pages can't run Python; see Backend below), then add the repo variable **Settings → Secrets and variables → Actions → Variables → `API_URL`** = its `https://…` URL (no trailing slash) and re-run the workflow.
   4. On the backend set `FRONTEND_ORIGIN=https://<your-username>.github.io` (origin only, no `/general` path).
   The site is served at `https://<your-username>.github.io/<repo-name>/`. The detail page lives at `/opening?id=N` because static export has no dynamic routes. To test a Pages build locally: `NEXT_PUBLIC_BASE_PATH=/general npm run build` then serve `out/` under `/general`.
 * **Frontend (Vercel/Netlify):** set the project root to `frontend/`, and `NEXT_PUBLIC_API_URL` to your backend's public URL.

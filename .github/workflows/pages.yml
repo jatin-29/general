@@ -25,16 +25,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Check API_URL
-        run: |
-          if [ -z "${{ vars.API_URL }}" ]; then
-            echo "::error::Set the repository variable API_URL (Settings > Secrets and variables > Actions > Variables) to your deployed backend's https URL."
-            exit 1
-          fi
       - name: Build
         working-directory: frontend
         env:
+          # No API_URL variable => demo mode with sample data
           NEXT_PUBLIC_API_URL: ${{ vars.API_URL }}
+          NEXT_PUBLIC_DEMO: ${{ vars.API_URL == '' && 'true' || 'false' }}
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
         run: |
           npm ci

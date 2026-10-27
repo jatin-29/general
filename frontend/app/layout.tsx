@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
 import ThemeToggle from "@/components/ThemeToggle";
+import { DEMO } from "@/lib/demo";
 
 export const metadata: Metadata = {
   title: "OpeningsHub",
@@ -35,6 +36,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </nav>
             </div>
           </header>
+          {DEMO && (
+            <div className="bg-amber-100 px-4 py-2 text-center text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              Demo mode: showing sample data. Connect a backend (set <code>API_URL</code>) to see real openings.
+            </div>
+          )}
           <main className="mx-auto max-w-4xl px-4 py-6">{children}</main>
         </ToastProvider>
       </body>

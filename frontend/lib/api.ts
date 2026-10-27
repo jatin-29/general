@@ -1,3 +1,6 @@
+import { DEMO, demoOpening, demoOpenings, demoSetApplied } from "./demo";
+
+export { DEMO };
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type EmploymentType = "internship" | "full-time" | "contract";
@@ -76,6 +79,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getOpenings(f: OpeningFilters): Promise<OpeningList> {
+  if (DEMO) return Promise.resolve(demoOpenings(f));
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) {
     if (v !== undefined && v !== "" && v !== null) q.set(k, String(v));
@@ -83,10 +87,16 @@ export function getOpenings(f: OpeningFilters): Promise<OpeningList> {
   return request(`/api/openings?${q}`);
 }
 
-export const getOpening = (id: number | string) => request<OpeningDetail>(`/api/openings/${id}`);
+export const getOpening = (id: number | string) => {
+  if (DEMO) {
+    const o = demoOpening(Number(id));
+    return o ? Promise.resolve(o) : Promise.reject(new ApiError("Opening not found", 404));
+  }
+  return request<OpeningDetail>(`/api/openings/${id}`);
+};
 
 export const setApplied = (id: number, applied: boolean) =>
-  request<Opening>(`/api/openings/${id}`, {
+  DEMO ? Promise.resolve(demoSetApplied(id, applied)) : request<Opening>(`/api/openings/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ applied }),
@@ -99,6 +109,7 @@ export function uploadWhatsApp(
   onUploaded: () => void,
   groupName?: string,
 ): Promise<UploadResult> {
+  if (DEMO) return Promise.reject(new ApiError("Uploads need a backend. This is a demo with sample data.", 0));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_URL}/api/upload/whatsapp`);
