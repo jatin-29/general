@@ -17,6 +17,10 @@ on:
         description: "Look again at the latest N posts of each chat (0 = normal run)"
         type: number
         default: 0
+      rescan_chats:
+        description: "Only re-check these chats (comma separated, e.g. me), empty = all"
+        type: string
+        default: ""
       delete:
         description: "Job ids to delete from the website, comma separated (used by the site's delete button)"
         type: string
@@ -64,6 +68,7 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           DELETE_IDS: ${{ inputs.delete }}
+          RESCAN_CHATS: ${{ inputs.rescan_chats }}
 
       # New public-channel posts are written to data/jobs.json; commit it so the website can show them.
       - name: Publish new jobs for the website

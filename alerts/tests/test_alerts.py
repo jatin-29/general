@@ -366,3 +366,47 @@ def test_deleted_job_is_not_collected_again_on_rescan():
     # even with the run memory lost, the deleted job is neither stored nor alerted again
     run_async(run.check_telegram(tg, "-100", State(), cfg, notify, store))
     assert all("a.co/1" not in t for t in sent) and len(store.jobs) == 1
+
+
+# ---------------------------------------------------------------- promo links and Saved Messages duplicates
+def test_promo_links_are_not_apply_links_or_identity():
+    from core import job_links, make_job
+
+    a = "Acme hiring SDE\nJoin channel: https://whatsapp.com/channel/abc\nApply https://acme.com/jobs/1"
+    b = "Zeta hiring QA\nJoin channel: https://whatsapp.com/channel/abc"
+    assert job_links(a) == ["https://acme.com/jobs/1"]
+    assert make_job("P", a, None)["apply_link"] == "https://acme.com/jobs/1"
+    assert fingerprint(a) == "link:acme.com/jobs/1" and fingerprint(b).startswith("txt:")  # b is not "the same job" as anything sharing the footer
+    c = "Beta hiring Analyst\nhttps://chat.whatsapp.com/xyz https://instagram.com/jobs_page https://youtu.be/v"
+    assert job_links(c) == [] and make_job("P", c, None)["apply_link"] is None
+
+
+def test_saved_messages_forward_is_kept_even_if_the_link_was_seen_in_a_group():
+    from core import make_job
+
+    store, state = JobStore(password="pw"), State()
+    group_post = "Acme hiring SDE https://acme.com/jobs/1"
+    store.add(make_job("Premium", group_post, None))
+    state.mark_seen(fingerprint(group_post))
+    me = SimpleNamespace(first_name="Me", username=None, id=1)
+    forwarded = "Forwarded from WhatsApp: Acme SDE role, referral via Rahul. https://acme.com/jobs/1"
+    tg = FakeTelegram({"me": (me, [(1, forwarded), (2, forwarded)])})  # sent twice by mistake
+    sent, notify = make_notifier()
+    assert run_async(run.check_telegram(tg, "me", state, Config(first_run_backfill=5), notify, store)) == 1
+    assert len(store.jobs) == 2 and store.jobs[0]["source"] == "Saved Messages"  # added once, not dropped
+
+
+def test_rescan_of_saved_messages_keeps_deleted_old_forwards_deleted():
+    from core import make_job
+
+    store, state = JobStore(password="pw"), State()
+    old = "Acme SDE role https://acme.com/jobs/1"
+    job = make_job("Saved Messages", old, None)  # stored before the fix: identified by its link
+    store.add(job)
+    store.delete([job["id"]])
+    state.telegram["me"] = 5
+    me = SimpleNamespace(first_name="Me", username=None, id=1)
+    tg = FakeTelegram({"me": (me, [(4, old), (5, "Zeta QA role https://zeta.io/careers")])})
+    sent, notify = make_notifier()
+    run_async(run.check_telegram(tg, "me", state, Config(), notify, store, rescan=10))
+    assert [j["text"] for j in store.jobs] == ["Zeta QA role https://zeta.io/careers"]

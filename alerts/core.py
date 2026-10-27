@@ -64,9 +64,25 @@ def normalize_link(url: str) -> str:
     return f"{u.netloc.lower().removeprefix('www.')}{u.path.rstrip('/')}" + (f"?{urlencode(q)}" if q else "")
 
 
-def fingerprint(text: str) -> str:
-    """Same apply link (or same text) in two groups => same fingerprint, so you get one alert."""
-    links = [u for u in extract_links(text) if "t.me/" not in u]
+# Links that are never the job itself: channel/group invites and social profiles in post footers.
+PROMO_HOSTS = re.compile(
+    r"(^|\.)(t\.me|telegram\.(me|dog)|whatsapp\.com|wa\.me|instagram\.com|youtube\.com|youtu\.be|linktr\.ee|"
+    r"facebook\.com|fb\.me|twitter\.com|x\.com|discord\.(gg|com)|threads\.net)$",
+    re.I,
+)
+
+
+def job_links(text: str) -> list[str]:
+    """Links that can be an apply link (promo / invite links removed)."""
+    return [u for u in extract_links(text) if not PROMO_HOSTS.search(urlsplit(u).netloc.lower().split(":")[0])]
+
+
+def fingerprint(text: str, by_link: bool = True) -> str:
+    """Same apply link (or same text) in two groups => same fingerprint, so you get one alert.
+
+    by_link=False compares the text only: used for Saved Messages, where you forwarded a post on purpose.
+    """
+    links = job_links(text) if by_link else []
     if links:
         return "link:" + normalize_link(links[0])
     norm = " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
@@ -146,12 +162,12 @@ MAX_STORED_CHARS = 2500
 JOB_ID = re.compile(r"^[0-9a-f]{12}$")
 
 
-def make_job(source: str, text: str, post_url: str | None, posted_at=None, now=None) -> dict:
+def make_job(source: str, text: str, post_url: str | None, posted_at=None, now=None, fp: str | None = None) -> dict:
     """One listing as stored in jobs.json."""
     from datetime import datetime, timezone
 
-    links = [u for u in extract_links(text) if "t.me/" not in u]
-    fp = fingerprint(text)
+    links = job_links(text)
+    fp = fp or fingerprint(text)
     return {
         "id": hashlib.sha1(fp.encode()).hexdigest()[:12],
         "fingerprint": fp,
@@ -232,7 +248,7 @@ class JobStore:
         return cls(raw.get("jobs", []), password, raw.get("deleted", []))
 
     def add(self, job: dict) -> bool:
-        if job["fingerprint"] in self.deleted or any(j["fingerprint"] == job["fingerprint"] for j in self.jobs):
+        if job["fingerprint"] in self.deleted or any(j["fingerprint"] == job["fingerprint"] or j["text"] == job["text"] for j in self.jobs):
             return False
         self.jobs.insert(0, job)
         self.new += 1

@@ -173,12 +173,14 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
         # In Saved Messages you chose what to forward, so everything counts (no keyword filter).
         wanted = (saved or not is_excluded(text, cfg.exclude)) if accept_all else is_match(text, cfg.include, cfg.exclude)
         if text and not baseline_only and wanted:
-            fp = fingerprint(text)
+            fp = fingerprint(text, by_link=not saved)  # your own forwards: only the exact same text is a duplicate
             deleted = store is not None and fp in store.deleted  # you deleted it on the website: never again
+            if saved and store is not None and last is not None and m.id <= last:  # older forwards were stored by link
+                deleted = deleted or fingerprint(text) in store.deleted
             if not state.was_seen(fp) and not deleted:
                 url = None if saved else post_url(entity, m.id)
                 if store is not None and (public or store.allow_private):  # private chats only when encrypted
-                    if store.add(make_job(title, text, url, getattr(m, "date", None))):
+                    if store.add(make_job(title, text, url, getattr(m, "date", None), fp=fp)):
                         seen["web"] += 1
                 if not saved:  # no point alerting you about a message already in your Saved Messages
                     await notify(format_alert(title, text, url, cfg.max_chars))
@@ -320,7 +322,8 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
         total = 0
         for ref in cfg.telegram_chats:
             try:
-                n = await check_telegram(client, ref, state, cfg, outbox.add, store, rescan)
+                scope = {c.strip() for c in env.get("RESCAN_CHATS", "").split(",") if c.strip()}
+                n = await check_telegram(client, ref, state, cfg, outbox.add, store, rescan if not scope or str(ref) in scope else 0)
                 log.info("telegram %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
