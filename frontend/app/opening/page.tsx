@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { getOpening, setApplied, type OpeningDetail } from "@/lib/api";
 import { deadlineBadge, formatDate } from "@/lib/format";
 import { Pill } from "@/components/OpeningCard";
@@ -17,13 +17,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default function OpeningPage() {
-  const { id } = useParams<{ id: string }>();
+function OpeningView() {
+  const id = useSearchParams().get("id");
   const toast = useToast();
   const [o, setO] = useState<OpeningDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return setError("No opening specified");
     getOpening(id).then(setO).catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, [id]);
 
@@ -80,5 +81,14 @@ export default function OpeningPage() {
         <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{o.raw_text}</pre>
       </section>
     </div>
+  );
+}
+
+// Static export (GitHub Pages) can't have dynamic routes, so the id is a query param: /opening?id=7
+export default function OpeningPage() {
+  return (
+    <Suspense fallback={null}>
+      <OpeningView />
+    </Suspense>
   );
 }

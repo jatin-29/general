@@ -42,7 +42,7 @@ export default function OpeningCard({
           )}
           <Pill className={URGENCY[badge.urgency]}>{badge.label}</Pill>
         </div>
-        <Link href={`/openings/${o.id}`} className="block truncate text-base font-semibold hover:text-indigo-600 dark:hover:text-indigo-400">
+        <Link href={`/opening?id=${o.id}`} className="block truncate text-base font-semibold hover:text-indigo-600 dark:hover:text-indigo-400">
           {o.role}
         </Link>
         <p className="truncate text-sm text-slate-600 dark:text-slate-400">
@@ -67,7 +67,7 @@ export default function OpeningCard({
             Apply ↗
           </a>
         ) : (
-          <Link href={`/openings/${o.id}`} className="btn-ghost">
+          <Link href={`/opening?id=${o.id}`} className="btn-ghost">
             View post
           </Link>
         )}

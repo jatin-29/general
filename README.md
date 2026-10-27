@@ -114,7 +114,13 @@ Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked)
 
 ## Deployment notes
 
-* **Frontend (Vercel/Netlify):** set the project root to `frontend/`, and the env var `NEXT_PUBLIC_API_URL` to your backend's public URL.
+* **Frontend on GitHub Pages:** the frontend is a static export, and `.github/workflows/pages.yml` builds and deploys it on every push to `main` that touches `frontend/`. One-time setup:
+  1. Deploy the backend somewhere with HTTPS first (GitHub Pages can't run Python; see Backend below).
+  2. Repo **Settings → Secrets and variables → Actions → Variables**: add `API_URL` = your backend's `https://…` URL (no trailing slash).
+  3. Repo **Settings → Pages → Source: GitHub Actions**.
+  4. On the backend set `FRONTEND_ORIGIN=https://<your-username>.github.io` (origin only, no `/general` path).
+  The site is served at `https://<your-username>.github.io/<repo-name>/`. The detail page lives at `/opening?id=N` because static export has no dynamic routes. To test a Pages build locally: `NEXT_PUBLIC_BASE_PATH=/general npm run build` then serve `out/` under `/general`.
+* **Frontend (Vercel/Netlify):** set the project root to `frontend/`, and `NEXT_PUBLIC_API_URL` to your backend's public URL.
 * **Backend:** needs a long-running process (Render, Railway, Fly.io, a VPS), not serverless, because the scheduler runs inside it. Run a **single instance** (multiple would duplicate polling). Set `FRONTEND_ORIGIN` to your frontend URL (comma-separate several) for CORS, and set `API_KEY`.
 * **Database:** SQLite needs a persistent volume. For Postgres: `pip install "psycopg[binary]"` and `DATABASE_URL=postgresql+psycopg://user:pass@host/db` (not tested in this repo; tables are created on start-up, there are no migrations yet).
 * **Security:** `/api/upload/whatsapp`, `/api/sources` and the PATCH endpoints are unauthenticated (the dashboard is meant for personal use) and an upload spends Anthropic credits. If you expose the backend publicly, put it behind auth (a reverse proxy with basic auth, Cloudflare Access, etc.).
