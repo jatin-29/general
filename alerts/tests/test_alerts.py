@@ -306,3 +306,29 @@ def test_website_updated_even_if_alerts_fail():
     with pytest.raises(RuntimeError):
         run_async(run.check_telegram(tg, "-100", State(), Config(include=["hiring"], first_run_backfill=5), notify, store))
     assert len(store.jobs) == 2  # stored before the alert was attempted
+
+
+# ---------------------------------------------------------------- accept_all + rescan
+def test_accept_all_chat_keeps_posts_without_keywords_but_blocks_excluded():
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    msgs = [(1, "Zeta Labs | SDE 1 | Bengaluru https://zeta.io/a"), (2, "Join our paid course today"), (3, "hiring QA https://q.co/1")]
+    cfg = Config(include=["hiring"], exclude=["course"], accept_all=["-100"], first_run_backfill=5)
+    store = JobStore(password="pw")
+    sent, notify = make_notifier()
+    assert run_async(run.check_telegram(FakeTelegram({"-100": (private, msgs)}), "-100", State(), cfg, notify, store)) == 2
+    assert {j["apply_link"] for j in store.jobs} == {"https://zeta.io/a", "https://q.co/1"}  # course ad still blocked
+
+
+def test_rescan_recovers_skipped_posts_without_duplicates_or_moving_back():
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    msgs = [(1, "hiring A https://a.co/1"), (2, "Zeta Labs SDE 1 https://zeta.io/a"), (3, "Acme Analyst https://acme.io/b")]
+    tg = FakeTelegram({"-100": (private, msgs)})
+    state, store = State(), JobStore(password="pw")
+    sent, notify = make_notifier()
+    strict = Config(include=["hiring"], first_run_backfill=5)
+    assert run_async(run.check_telegram(tg, "-100", state, strict, notify, store)) == 1  # 2 skipped by the keyword filter
+    relaxed = Config(include=["hiring"], accept_all=["-100"], first_run_backfill=5)
+    assert run_async(run.check_telegram(tg, "-100", state, relaxed, notify, store)) == 0  # normal run: nothing newer
+    assert run_async(run.check_telegram(tg, "-100", state, relaxed, notify, store, rescan=10)) == 2  # the 2 come back
+    assert len(store.jobs) == 3 and state.telegram["-100"] == 3
+    assert run_async(run.check_telegram(tg, "-100", state, relaxed, notify, store, rescan=10)) == 0  # no duplicates

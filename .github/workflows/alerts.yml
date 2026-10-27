@@ -13,6 +13,10 @@ on:
         description: "Forget what was already sent and resend the latest posts"
         type: boolean
         default: false
+      rescan:
+        description: "Look again at the latest N posts of each chat (0 = normal run)"
+        type: number
+        default: 0
 
 concurrency:
   group: job-alerts
@@ -42,7 +46,7 @@ jobs:
           restore-keys: alerts-state-
 
       - name: Check sources and send alerts
-        run: python alerts/run.py ${{ inputs.send_test && '--test' || '' }} ${{ inputs.fresh && '--fresh' || '' }}
+        run: python alerts/run.py ${{ inputs.send_test && '--test' || '' }} ${{ inputs.fresh && '--fresh' || '' }} ${{ inputs.rescan && format('--rescan {0}', inputs.rescan) || '' }}
         env:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}

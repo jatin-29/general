@@ -20,6 +20,7 @@ class Config:
     youtube_channels: list[str] = field(default_factory=list)
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    accept_all: list[str] = field(default_factory=list)  # chats where every text post counts (exclude still applies)
     first_run_backfill: int = 3
     max_chars: int = 700
 
@@ -38,6 +39,11 @@ def _has(text: str, kw: str) -> bool:
     prefix = kw.endswith("*")
     pattern = r"(?<!\w)" + re.escape(kw.rstrip("*")) + ("" if prefix else r"(?!\w)")
     return re.search(pattern, text) is not None
+
+
+def is_excluded(text: str, exclude: list[str]) -> bool:
+    t = text.lower()
+    return any(_has(t, w) for w in exclude)
 
 
 def is_match(text: str, include: list[str], exclude: list[str]) -> bool:

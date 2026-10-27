@@ -19,7 +19,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
-    Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_match, load_config, make_job, parse_feed,
+    Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, load_config, make_job, parse_feed,
 )
 
 log = logging.getLogger("alerts")
@@ -139,7 +139,7 @@ def post_url(entity, msg_id: int) -> str | None:
     return None
 
 
-async def check_telegram(client, ref: str, state: State, cfg: Config, notify, store: JobStore | None = None) -> int:
+async def check_telegram(client, ref: str, state: State, cfg: Config, notify, store: JobStore | None = None, rescan: int = 0) -> int:
     """Send alerts for new matching messages. Returns how many were sent.
 
     The saved position only moves past a message after it was handled, so a failed send is retried next run.
@@ -152,7 +152,10 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
     last = state.telegram.get(key)
 
     baseline_only = last is None and cfg.first_run_backfill == 0
-    if last is None:  # first time we see this chat: look at the newest few only
+    accept_all = saved or str(ref) in {str(c) for c in cfg.accept_all}
+    if rescan and last is not None:  # one-off: look again at the latest N posts (already-stored ones are skipped)
+        msgs = [m async for m in client.iter_messages(entity, limit=rescan)]
+    elif last is None:  # first time we see this chat: look at the newest few only
         msgs = [m async for m in client.iter_messages(entity, limit=max(cfg.first_run_backfill, 1))]
     else:
         msgs = [m async for m in client.iter_messages(entity, min_id=last, limit=200)]
@@ -168,7 +171,8 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
             text = ""  # the collector's own alerts live in Saved Messages too; never re-import them
             seen["own"] += 1
         # In Saved Messages you chose what to forward, so everything counts (no keyword filter).
-        if text and not baseline_only and (saved or is_match(text, cfg.include, cfg.exclude)):
+        wanted = (saved or not is_excluded(text, cfg.exclude)) if accept_all else is_match(text, cfg.include, cfg.exclude)
+        if text and not baseline_only and wanted:
             fp = fingerprint(text)
             if not state.was_seen(fp):
                 url = None if saved else post_url(entity, m.id)
@@ -183,7 +187,7 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
                 seen["dup"] += 1
         elif text and not baseline_only:
             seen["no_match"] += 1
-        state.telegram[key] = m.id
+        state.telegram[key] = max(m.id, state.telegram.get(key) or 0)  # a rescan must never move backwards
     log.info(
         "%s: looked at %d new message(s): %d collected (%d added to website), %d without text, %d own alerts, %d not matching keywords, %d duplicates",
         ref, len(msgs), sent, seen["web"], seen["no_text"], seen["own"], seen["no_match"], seen["dup"],
@@ -267,7 +271,7 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
 
 
 # ---------------------------------------------------------------- main
-async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False, store: JobStore | None = None) -> int:
+async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False, store: JobStore | None = None, rescan: int = 0) -> int:
     client = None
     session = clean_session(env.get("TELEGRAM_SESSION_STRING", ""))
     api_id, api_hash = env.get("TELEGRAM_API_ID", ""), env.get("TELEGRAM_API_HASH", "")
@@ -315,7 +319,7 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
         total = 0
         for ref in cfg.telegram_chats:
             try:
-                n = await check_telegram(client, ref, state, cfg, outbox.add, store)
+                n = await check_telegram(client, ref, state, cfg, outbox.add, store, rescan)
                 log.info("telegram %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
@@ -345,6 +349,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="print alerts instead of sending; don't save state")
     ap.add_argument("--jobs", default=str(HERE.parent / "data" / "jobs.json"), help="where the website's job list is stored")
     ap.add_argument("--fresh", action="store_true", help="forget what was already sent and resend the latest posts")
+    ap.add_argument("--rescan", type=int, default=0, metavar="N", help="look again at the latest N posts of each chat")
     ap.add_argument("--loop", type=int, metavar="MINUTES", help="repeat forever")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -360,7 +365,7 @@ def main() -> int:
             log.error("%s Jobs are still sent to Telegram, but the website list is not updated.", e)
             store = None
         try:
-            errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test, store))
+            errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test, store, args.rescan))
         except AuthError as e:
             log.error("%s", e)
             return 2
