@@ -9,6 +9,17 @@ export interface Job {
   post_url: string | null;
   posted_at: string | null;
   added_at: string;
+  // Only on jobs you add yourself with the + button (kept in this browser):
+  company?: string | null;
+  role?: string | null;
+  deadline?: string | null; // YYYY-MM-DD
+  manual?: boolean;
+}
+
+/** "2026-11-05" as a local date (new Date("2026-11-05") would be UTC and can shift a day). */
+export function parseIso(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
 }
 
 export interface JobsFile {

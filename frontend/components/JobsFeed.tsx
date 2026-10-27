@@ -1,7 +1,16 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, timeAgo, type Job } from "@/lib/jobs";
+import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, parseIso, timeAgo, type Job } from "@/lib/jobs";
+import { deadlineBadge, parseJob } from "@/lib/extract";
+import AddJobDialog from "./AddJobDialog";
+
+const TONE = {
+  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  soon: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  expired: "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
+};
 
 const PAGE = 30;
 const REFRESH_MS = 5 * 60_000;
@@ -38,18 +47,29 @@ function Linkified({ text }: { text: string }) {
   );
 }
 
-function JobCard({ job, isNew, applied, onToggle }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void }) {
+function JobCard({ job, isNew, applied, onToggle, onDelete }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void; onDelete?: () => void }) {
   const [open, setOpen] = useState(false);
-  const body = jobBody(job.text);
+  const parsed = useMemo(() => parseJob(job.text), [job.text]);
+  const company = job.company ?? parsed.company;
+  const role = job.role ?? parsed.role;
+  const deadline = job.deadline ? parseIso(job.deadline) : parsed.deadline;
+  const badge = deadline ? deadlineBadge(deadline) : null;
+  const expired = badge?.tone === "expired";
+  const title = role ?? jobTitle(job.text);
+  const body = role ? job.text.trim() : jobBody(job.text); // when the role was found, keep the whole post visible
   const long = body.length > 220 || body.split("\n").length > 4;
   return (
-    <article className={`card flex flex-col gap-3 p-4 transition ${applied ? "opacity-60" : ""}`}>
+    <article className={`card flex flex-col gap-3 p-4 transition ${applied || expired ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
         {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
+        {badge && <span className={`rounded-full px-2.5 py-0.5 font-medium ${TONE[badge.tone]}`}>{badge.label}</span>}
         <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
       </div>
-      <h2 className="text-base font-semibold leading-snug">{jobTitle(job.text)}</h2>
+      <div>
+        <h2 className="text-base font-semibold leading-snug">{title}</h2>
+        {company && <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{company}</p>}
+      </div>
       {body && (
         <div>
           <p className={`whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-400 ${open ? "" : "line-clamp-3"}`}>
@@ -71,7 +91,10 @@ function JobCard({ job, isNew, applied, onToggle }: { job: Job; isNew: boolean; 
         {job.apply_link && job.post_url && (
           <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Original post</a>
         )}
-        <label className="ml-auto flex cursor-pointer select-none items-center gap-1.5 text-sm">
+        {onDelete && (
+          <button type="button" className="btn-ghost ml-auto !px-2.5 text-red-600" aria-label="Delete this job" title="Delete" onClick={() => confirm("Delete this job?") && onDelete()}>🗑</button>
+        )}
+        <label className={`${onDelete ? "" : "ml-auto "}flex cursor-pointer select-none items-center gap-1.5 text-sm`}>
           <input type="checkbox" checked={applied} onChange={onToggle} className="h-4 w-4 rounded accent-indigo-600" />
           Applied
         </label>
@@ -93,6 +116,8 @@ export default function JobsFeed() {
   const [password, setPassword] = useState("");
   const [locked, setLocked] = useState<"no" | "need" | "wrong">("no");
   const [ready, setReady] = useState(false);
+  const [manual, setManual] = useState<Job[]>([]);
+  const [adding, setAdding] = useState(false);
 
   const refresh = useCallback(async (pw: string = password) => {
     try {
@@ -119,6 +144,7 @@ export default function JobsFeed() {
   useEffect(() => {
     if (!ready) return;
     setApplied(new Set(load<string[]>("jobs_applied", [])));
+    setManual(load<Job[]>("jobs_manual", []));
     setLastVisit(load<number>("jobs_last_visit", 0));
     const leave = () => save("jobs_last_visit", Date.now()); // "New" = arrived since you last visited
     window.addEventListener("pagehide", leave);
@@ -140,13 +166,29 @@ export default function JobsFeed() {
       return next;
     });
 
-  const sources = useMemo(() => [...new Set((jobs ?? []).map((j) => j.source))].sort(), [jobs]);
+  const addManual = (job: Job) => {
+    const next = [job, ...manual];
+    setManual(next);
+    save("jobs_manual", next);
+    setAdding(false);
+  };
+  const removeManual = (id: string) => {
+    const next = manual.filter((j) => j.id !== id);
+    setManual(next);
+    save("jobs_manual", next);
+  };
+
+  const all = useMemo(() => [...manual, ...(jobs ?? [])], [manual, jobs]);
+  const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (jobs ?? []).filter(
-      (j) => (!source || j.source === source) && (!hideApplied || !applied.has(j.id)) && (!q || j.text.toLowerCase().includes(q)),
+    return all.filter(
+      (j) =>
+        (!source || j.source === source) &&
+        (!hideApplied || !applied.has(j.id)) &&
+        (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
     );
-  }, [jobs, search, source, hideApplied, applied]);
+  }, [all, search, source, hideApplied, applied]);
 
   useEffect(() => setShown(PAGE), [search, source, hideApplied]);
 
@@ -172,13 +214,23 @@ export default function JobsFeed() {
 
   return (
     <div className="space-y-4">
-      <div className="card grid gap-3 p-4 sm:grid-cols-[1fr_12rem]">
+      <div className="card grid gap-3 p-4 sm:grid-cols-[1fr_12rem_auto]">
         <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">All sources</option>
           {sources.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label className="flex cursor-pointer items-center gap-1.5 text-sm sm:col-span-2">
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          aria-label="Add a job manually"
+          title="Add a job or company by hand"
+          className="btn-primary !px-3"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          <span className="sm:hidden">Add a job</span>
+        </button>
+        <label className="flex cursor-pointer items-center gap-1.5 text-sm sm:col-span-3">
           <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} />
           Hide jobs I applied to
         </label>
@@ -202,21 +254,22 @@ export default function JobsFeed() {
         <div className="space-y-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card h-36 animate-pulse bg-slate-100 dark:bg-slate-900" />)}</div>
       ) : visible.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="font-medium">{jobs.length === 0 ? "No jobs yet" : "No jobs match"}</p>
+          <p className="font-medium">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {jobs.length === 0 ? "New posts from your channels appear here every 30 minutes." : "Try clearing the search or filters."}
+            {all.length === 0 ? "New posts from your channels appear here every 30 minutes. You can also add one with the + button." : "Try clearing the search or filters."}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {visible.slice(0, shown).map((j) => (
-            <JobCard key={j.id} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} isNew={lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit} />
+            <JobCard key={j.id} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit} />
           ))}
           {visible.length > shown && (
             <button className="btn-ghost w-full" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
           )}
         </div>
       )}
+      {adding && <AddJobDialog onClose={() => setAdding(false)} onSave={addManual} />}
     </div>
   );
 }
