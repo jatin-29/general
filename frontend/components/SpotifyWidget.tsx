@@ -43,6 +43,13 @@ export default function SpotifyWidget() {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // "Spotify" item in the menu
+  useEffect(() => {
+    const show = () => (isConnected() ? setMenu((m) => !m) : setOpen((o) => !o));
+    window.addEventListener("openings:spotify", show);
+    return () => window.removeEventListener("openings:spotify", show);
+  }, []);
+
   // restore settings, and finish a login if Spotify just redirected back here
   useEffect(() => {
     setClientId(getClientId());

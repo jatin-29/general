@@ -1,21 +1,26 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, parseIso, timeAgo, type Job } from "@/lib/jobs";
 import { daysLeft, deadlineBadge, parseJobCached } from "@/lib/extract";
-import CountUp from "./CountUp";
 import AddJobDialog from "./AddJobDialog";
+import CountUp from "./CountUp";
+import HeroVisual from "./HeroVisual";
+
+const PAGE = 24;
+const REFRESH_MS = 5 * 60_000;
+const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
 
 const TONE = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  urgent: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
   soon: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   expired: "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
 };
-
-const PAGE = 30;
-const REFRESH_MS = 5 * 60_000;
-const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
+const AVATAR = [
+  "linear-gradient(135deg,#ff9ec4,#ff6fa5)", "linear-gradient(135deg,#8fd3ff,#5ab4ff)", "linear-gradient(135deg,#d08bff,#a65bff)",
+  "linear-gradient(135deg,#ffd27a,#ffa63d)", "linear-gradient(135deg,#7be0b4,#2ec48a)",
+];
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -50,6 +55,7 @@ function Linkified({ text }: { text: string }) {
 
 function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void; onDelete?: () => void; index?: number }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLElement>(null);
   const parsed = parseJobCached(job.text);
   const company = job.company ?? parsed.company;
   const role = job.role ?? parsed.role;
@@ -57,46 +63,63 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
   const badge = deadline ? deadlineBadge(deadline) : null;
   const expired = badge?.tone === "expired";
   const title = role ?? jobTitle(job.text);
-  const body = role ? job.text.trim() : jobBody(job.text); // when the role was found, keep the whole post visible
+  const body = job.manual ? job.text.trim() : role ? job.text.trim() : jobBody(job.text);
   const long = body.length > 220 || body.split("\n").length > 4;
+  const initial = (company ?? title).replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase() || "•";
+  const hue = [...(company ?? title)].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR.length;
+
+  // fade/slide in when scrolled into view
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) return el.classList.add("in");
+    const io = new IntersectionObserver(
+      (entries) => entries.some((e) => e.isIntersecting) && (el.classList.add("in"), io.disconnect()),
+      { rootMargin: "0px 0px -8% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <article style={{ animationDelay: `${Math.min(index, 10) * 55}ms` }} className={`card lift animate-fade-up flex flex-col gap-3 p-4 ${applied || expired ? "opacity-60" : ""}`}>
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
-        {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
-        {badge && <span className={`rounded-full px-2.5 py-0.5 font-medium ${TONE[badge.tone]} ${badge.tone === "urgent" ? "pulse-ring" : ""}`}>{badge.label}</span>}
-        <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
-      </div>
-      <div>
-        <h2 className="text-base font-semibold leading-snug">{title}</h2>
-        {company && <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{company}</p>}
+    <article ref={ref} style={{ transitionDelay: `${(index % 2) * 70}ms` }} className={`card lift reveal flex flex-col gap-3 p-5 ${applied || expired ? "opacity-65" : ""}`}>
+      <div className="flex gap-3.5">
+        <div className="font-display grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl font-black text-white shadow-md" style={{ background: AVATAR[hue] }} aria-hidden="true">{initial}</div>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
+            {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
+            {badge && <span className={`rounded-full px-2.5 py-0.5 font-bold ${TONE[badge.tone]} ${badge.tone === "urgent" ? "pulse-ring" : ""}`}>{badge.label}</span>}
+            <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
+          </div>
+          <h3 className="font-display text-lg font-black leading-snug">{title}</h3>
+          {company && <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{company}</p>}
+        </div>
       </div>
       {body && (
         <div>
-          <p className={`whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-400 ${open ? "" : "line-clamp-3"}`}>
+          <p className={`whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300 ${open ? "" : "line-clamp-3"}`}>
             <Linkified text={body} />
           </p>
           {long && (
-            <button onClick={() => setOpen(!open)} className="mt-1 text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+            <button onClick={() => setOpen(!open)} className="mt-1 text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-400">
               {open ? "Show less" : "Read more"}
             </button>
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-auto flex flex-wrap items-center gap-2">
         {job.apply_link ? (
           <a href={job.apply_link} target="_blank" rel="noopener noreferrer" className="btn-primary">Apply ↗</a>
         ) : job.post_url ? (
           <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-primary">Open post ↗</a>
         ) : null}
-        {job.apply_link && job.post_url && (
-          <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Original post</a>
-        )}
+        {job.apply_link && job.post_url && <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Original post</a>}
         {onDelete && (
-          <button type="button" className="btn-ghost ml-auto !px-2.5 text-red-600" aria-label="Delete this job" title="Delete" onClick={() => confirm("Delete this job?") && onDelete()}>🗑</button>
+          <button type="button" className="btn-ghost ml-auto !px-3 text-rose-600" aria-label="Delete this job" title="Delete" onClick={() => confirm("Delete this job?") && onDelete()}>🗑</button>
         )}
-        <label className={`${onDelete ? "" : "ml-auto "}flex cursor-pointer select-none items-center gap-1.5 text-sm`}>
-          <input type="checkbox" checked={applied} onChange={onToggle} className="h-4 w-4 rounded accent-indigo-600" />
+        <label className={`${onDelete ? "" : "ml-auto "}flex cursor-pointer select-none items-center gap-1.5 text-sm font-semibold`}>
+          <input type="checkbox" checked={applied} onChange={onToggle} className="h-4 w-4 rounded" />
           Applied
         </label>
       </div>
@@ -104,12 +127,31 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
   );
 }
 
+type Quick = "all" | "new" | "soon";
+
+function Tile({ label, n, bg, shadow, active, onClick, delay, glyph }: { label: string; n: number; bg: string; shadow: string; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center">
+      <button className="tile" aria-pressed={active} onClick={onClick} style={{ background: bg, animationDelay: `${delay}ms`, ["--tile-shadow" as string]: shadow }}>
+        <span className="glyph" aria-hidden="true">{glyph}</span>
+        <span className="num"><CountUp value={n} /></span>
+      </button>
+      <span className="tile-label">{label}</span>
+    </div>
+  );
+}
+
+const Star = <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 9.3l-5 4.4 1.6 6.8L12 17l-5.6 3.5L8 13.7 3 9.3l6.6-.7z" /></svg>;
+const Clock = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+const Grid = <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
+
 export default function JobsFeed() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("");
+  const [quick, setQuick] = useState<Quick>("all");
   const [hideApplied, setHideApplied] = useState(false);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [lastVisit, setLastVisit] = useState<number>(0);
@@ -156,8 +198,25 @@ export default function JobsFeed() {
       window.removeEventListener("pagehide", leave);
       clearInterval(id);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, password]);
+
+  // menu actions
+  useEffect(() => {
+    const add = () => setAdding(true);
+    const lock = () => {
+      save("jobs_pw", "");
+      setPassword("");
+      setJobs(null);
+      setLocked("need");
+    };
+    window.addEventListener("openings:add", add);
+    window.addEventListener("openings:lock", lock);
+    return () => {
+      window.removeEventListener("openings:add", add);
+      window.removeEventListener("openings:lock", lock);
+    };
+  }, []);
 
   const toggle = (id: string) =>
     setApplied((prev) => {
@@ -180,127 +239,129 @@ export default function JobsFeed() {
   };
 
   const all = useMemo(() => [...manual, ...(jobs ?? [])], [manual, jobs]);
-  const stats = useMemo(() => {
-    let closing = 0;
-    let fresh = 0;
-    for (const j of all) {
-      const dl = j.deadline ? parseIso(j.deadline) : parseJobCached(j.text).deadline;
-      if (dl) {
-        const d = daysLeft(dl);
-        if (d >= 0 && d <= 7) closing++;
-      }
-      if (lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit) fresh++;
-    }
-    return { total: all.length, fresh, closing, applied: all.filter((j) => applied.has(j.id)).length };
-  }, [all, applied, lastVisit]);
+  const deadlineOf = (j: Job) => (j.deadline ? parseIso(j.deadline) : parseJobCached(j.text).deadline);
+  const isNewJob = useCallback((j: Job) => lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit, [lastVisit]);
+  const isSoon = (j: Job) => {
+    const dl = deadlineOf(j);
+    if (!dl) return false;
+    const d = daysLeft(dl);
+    return d >= 0 && d <= 7;
+  };
+
+  const counts = useMemo(() => ({ total: all.length, fresh: all.filter(isNewJob).length, soon: all.filter(isSoon).length }), [all, isNewJob]);
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter(
       (j) =>
         (!source || j.source === source) &&
+        (quick === "all" || (quick === "new" ? isNewJob(j) : isSoon(j))) &&
         (!hideApplied || !applied.has(j.id)) &&
         (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
     );
-  }, [all, search, source, hideApplied, applied]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, search, source, quick, hideApplied, applied, isNewJob]);
 
-  useEffect(() => setShown(PAGE), [search, source, hideApplied]);
+  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied]);
 
   if (locked !== "no") {
     return (
-      <form
-        className="card animate-pop-in mx-auto mt-10 max-w-sm space-y-3 p-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const pw = (new FormData(e.currentTarget).get("pw") as string) ?? "";
-          setPassword(pw);
-          refresh(pw);
-        }}
-      >
-        <h1 className="text-lg font-semibold">🔒 Enter password</h1>
-        <p className="text-sm text-slate-500">These jobs are private. Enter the password you set up (it is remembered on this device).</p>
-        <input name="pw" type="password" autoComplete="current-password" autoFocus className="input" placeholder="Password" aria-label="Password" />
-        {locked === "wrong" && <p className="text-sm text-red-600 dark:text-red-400">Wrong password. Try again.</p>}
-        <button className="btn-primary w-full">Unlock</button>
-      </form>
+      <div className="grid min-h-[60vh] place-items-center">
+        <form
+          className="card mx-auto w-full max-w-sm animate-[pop-in_.4s_both] space-y-3 p-7"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const pw = (new FormData(e.currentTarget).get("pw") as string) ?? "";
+            setPassword(pw);
+            refresh(pw);
+          }}
+        >
+          <h1 className="font-display text-2xl font-black">🔒 Enter password</h1>
+          <p className="text-sm text-slate-500">These jobs are private. Enter the password you set up (it is remembered on this device).</p>
+          <input name="pw" type="password" autoComplete="current-password" autoFocus className="input" placeholder="Password" aria-label="Password" />
+          {locked === "wrong" && <p className="text-sm font-semibold text-rose-600">Wrong password. Try again.</p>}
+          <button className="btn-primary w-full !py-3">Unlock</button>
+        </form>
+      </div>
     );
   }
 
+  const tile = (q: Quick) => () => setQuick(quick === q ? "all" : q);
   return (
-    <div className="space-y-4">
-      {all.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(
-            [
-              ["Total jobs", stats.total, ""],
-              ["New since last visit", stats.fresh, "text-emerald-500"],
-              ["Closing this week", stats.closing, "text-amber-500"],
-              ["Applied", stats.applied, "gradient-text"],
-            ] as const
-          ).map(([label, n, tone], i) => (
-            <div key={label} style={{ animationDelay: `${i * 70}ms` }} className="card lift animate-fade-up p-3.5">
-              <div className={`text-2xl font-bold tabular-nums ${tone}`}><CountUp value={n} /></div>
-              <div className="text-xs text-slate-500">{label}</div>
-            </div>
-          ))}
+    <div>
+      {/* ---------- hero ---------- */}
+      <section className="grid grid-cols-1 items-center gap-6 pb-12 pt-4 lg:grid-cols-[1.1fr_1fr] lg:pt-10">
+        <div className="min-w-0">
+          <h1 className="hero-title text-[clamp(2.3rem,10.5vw,3.6rem)] sm:text-[clamp(3rem,6vw,4.6rem)] lg:text-[clamp(3rem,5vw,4.9rem)]">
+            <span className="line"><span style={{ animationDelay: "0.05s" }}>Find your next</span></span>
+            <span className="line"><span style={{ animationDelay: "0.2s" }}>opportunity</span></span>
+          </h1>
+          <p className="mt-4 max-w-md animate-[fade-up_.8s_.45s_both] break-words text-base font-bold text-white/90 drop-shadow">Fresh openings from your groups, collected for you.</p>
+          <a href="#jobs" className="btn-pill mt-7 animate-[fade-up_.8s_.55s_both]">
+            Browse jobs
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </a>
+          <div className="mt-10 flex flex-wrap items-start gap-3 sm:gap-4">
+            <Tile label="New" n={counts.fresh} bg="linear-gradient(160deg,#ff9ec4,#ff6fa5)" shadow="rgb(255 80 150 / .6)" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
+            <Tile label="Closing soon" n={counts.soon} bg="linear-gradient(160deg,#8fd3ff,#4aa8ff)" shadow="rgb(60 150 255 / .6)" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
+            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all"} onClick={() => setQuick("all")} delay={700} glyph={Grid} />
+            <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          </div>
         </div>
-      )}
+        <HeroVisual />
+      </section>
 
-      <div className="card animate-pop-in grid gap-3 p-4 sm:grid-cols-[1fr_12rem_auto]">
-        <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
-          <option value="">All sources</option>
-          {sources.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          aria-label="Add a job manually"
-          title="Add a job or company by hand"
-          className="btn-primary !px-3"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          <span className="sm:hidden">Add a job</span>
-        </button>
-        <label className="flex cursor-pointer items-center gap-1.5 text-sm sm:col-span-3">
-          <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} />
-          Hide jobs I applied to
-        </label>
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>{jobs ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : " "}</span>
-        <span>
-          {updatedAt ? `Updated ${timeAgo(updatedAt)} · ` : ""}
-          <button onClick={() => refresh()} className="text-indigo-600 hover:underline dark:text-indigo-400">Refresh</button>
-          {password && <> · <button onClick={() => { save("jobs_pw", ""); setPassword(""); setJobs(null); setLocked("need"); }} className="text-indigo-600 hover:underline dark:text-indigo-400">Lock</button></>}
-        </span>
-      </div>
-
-      {error && !jobs ? (
-        <div className="card flex flex-col items-center gap-3 p-10 text-center">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          <button className="btn-ghost" onClick={() => refresh()}>Retry</button>
-        </div>
-      ) : !jobs ? (
-        <div className="space-y-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-36" />)}</div>
-      ) : visible.length === 0 ? (
-        <div className="card p-10 text-center">
-          <p className="font-medium">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
-          <p className="mt-1 text-sm text-slate-500">
-            {all.length === 0 ? "New posts from your channels appear here every 30 minutes. You can also add one with the + button." : "Try clearing the search or filters."}
+      {/* ---------- list ---------- */}
+      <section id="jobs" className="scroll-mt-6">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <h2 className="font-display text-3xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">Latest openings</h2>
+          <p className="text-xs font-semibold text-white/90">
+            {jobs || manual.length ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : ""}
+            {updatedAt ? ` · Updated ${timeAgo(updatedAt)}` : ""} ·{" "}
+            <button onClick={() => refresh()} className="underline">Refresh</button>
           </p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {visible.slice(0, shown).map((j, i) => (
-            <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit} />
-          ))}
-          {visible.length > shown && (
-            <button className="btn-ghost w-full" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
-          )}
+
+        <div className="card mb-5 grid gap-3 p-3 sm:grid-cols-[1fr_13rem_auto] sm:items-center">
+          <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">All sources</option>
+            {sources.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap px-1 text-sm font-semibold">
+            <input type="checkbox" className="h-4 w-4" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} />
+            Hide applied
+          </label>
         </div>
-      )}
+
+        {error && !jobs ? (
+          <div className="card flex flex-col items-center gap-3 p-10 text-center">
+            <p className="text-sm font-semibold text-rose-600">{error}</p>
+            <button className="btn-ghost" onClick={() => refresh()}>Retry</button>
+          </div>
+        ) : !jobs && manual.length === 0 ? (
+          <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
+        ) : visible.length === 0 ? (
+          <div className="card p-12 text-center">
+            <p className="font-display text-xl font-black">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {all.length === 0 ? "New posts from your channels appear here every 30 minutes. You can also add one with the + button." : "Try clearing the search or the filter tiles."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {visible.slice(0, shown).map((j, i) => (
+              <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={isNewJob(j)} />
+            ))}
+            {visible.length > shown && (
+              <button className="btn-pill justify-center self-start lg:col-span-2 lg:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
+            )}
+          </div>
+        )}
+      </section>
+
       {adding && <AddJobDialog onClose={() => setAdding(false)} onSave={addManual} />}
     </div>
   );
