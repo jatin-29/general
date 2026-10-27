@@ -9,6 +9,10 @@ on:
         description: "Only send a test message to check delivery"
         type: boolean
         default: false
+      fresh:
+        description: "Forget what was already sent and resend the latest posts"
+        type: boolean
+        default: false
 
 concurrency:
   group: job-alerts
@@ -38,7 +42,7 @@ jobs:
           restore-keys: alerts-state-
 
       - name: Check sources and send alerts
-        run: python alerts/run.py ${{ inputs.send_test && '--test' || '' }}
+        run: python alerts/run.py ${{ inputs.send_test && '--test' || '' }} ${{ inputs.fresh && '--fresh' || '' }}
         env:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}

@@ -267,12 +267,13 @@ def main() -> int:
     ap.add_argument("--state", default=str(HERE / "state.json"))
     ap.add_argument("--test", action="store_true", help="send a test message and exit")
     ap.add_argument("--dry-run", action="store_true", help="print alerts instead of sending; don't save state")
+    ap.add_argument("--fresh", action="store_true", help="forget what was already sent and resend the latest posts")
     ap.add_argument("--loop", type=int, metavar="MINUTES", help="repeat forever")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     while True:
-        cfg, state = load_config(args.config), State.load(args.state)
+        cfg, state = load_config(args.config), (State() if args.fresh else State.load(args.state))
         try:
             errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test))
         except AuthError as e:
