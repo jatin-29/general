@@ -45,6 +45,13 @@ public, add a GitHub secret named **`SITE_PASSWORD`** (a long password you choos
 If you change the password, clear `data/jobs.json` (set it to `{"updated_at": null, "jobs": []}`) first.
 Your "Applied" ticks are saved only in your browser.
 
+## WhatsApp posts
+
+WhatsApp can't be read automatically, so forward the posts you like to your **Saved Messages** in Telegram
+(long-press the message, Share, Telegram, Saved Messages). With `"me"` in `telegram_chats`, the collector picks
+them up within 30 minutes and puts them on the website (encrypted, needs `SITE_PASSWORD`). Everything you
+forward is kept, with no keyword filter, and the collector's own 📌 alerts are ignored.
+
 ## Good to know
 
 - The first run sends only the latest few posts per group (`first_run_backfill`), then only new ones.

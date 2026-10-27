@@ -229,3 +229,23 @@ def test_private_group_is_stored_only_when_encrypted():
         run_async(run.check_telegram(tg, "-100", State(), cfg, notify, store))
         assert len(sent) == 1  # always reaches Saved Messages
     assert plain.jobs == [] and len(enc.jobs) == 1
+
+
+# ---------------------------------------------------------------- Saved Messages as an inbox
+def test_saved_messages_inbox():
+    me = SimpleNamespace(first_name="Me", username="my_public_username", id=1)  # a username must NOT make it public
+    msgs = [
+        (1, "📌 Jobs\n\nold alert the collector wrote https://a.co/alert"),
+        (2, "✅ Job alerts are connected. New matching posts will show up here."),
+        (3, "Forwarded from WhatsApp: Acme walk-in drive tomorrow 10am, Pune. Contact 99999 99999"),
+    ]
+    tg = FakeTelegram({"me": (me, msgs)})
+    cfg = Config(include=["hiring"], first_run_backfill=5)  # post has no keyword, but it was forwarded on purpose
+    sent, notify = make_notifier()
+    plain, enc = JobStore(), JobStore(password="pw")
+    assert run_async(run.check_telegram(tg, "me", State(), cfg, notify, plain)) == 1
+    assert run_async(run.check_telegram(tg, "me", State(), cfg, notify, enc)) == 1
+    assert sent == []  # no duplicate alert for something already in Saved Messages
+    assert plain.jobs == []  # never stored in plain text
+    assert len(enc.jobs) == 1 and enc.jobs[0]["source"] == "Saved Messages" and "Acme walk-in" in enc.jobs[0]["text"]
+    assert enc.jobs[0]["post_url"] is None  # the collector's own 📌/✅ messages were ignored

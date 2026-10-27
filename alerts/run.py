@@ -28,6 +28,9 @@ FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
 UC = re.compile(r"UC[\w-]{22}")
 
 
+OWN_ALERT_PREFIXES = ("📌", "✅ Job alerts")
+
+
 class AuthError(Exception):
     pass
 
@@ -96,9 +99,10 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
 
     The saved position only moves past a message after it was handled, so a failed send is retried next run.
     """
-    target = clean_ref(ref)
-    entity = await client.get_entity(target)
-    title = getattr(entity, "title", None) or getattr(entity, "first_name", None) or str(ref)
+    saved = str(ref).strip().lower() in ("me", "saved", "saved messages")  # your own Saved Messages
+    entity = await client.get_entity("me" if saved else clean_ref(ref))
+    title = "Saved Messages" if saved else (getattr(entity, "title", None) or getattr(entity, "first_name", None) or str(ref))
+    public = bool(getattr(entity, "username", None)) and not saved
     key = str(ref)
     last = state.telegram.get(key)
 
@@ -112,12 +116,16 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
     sent = 0
     for m in msgs:
         text = (getattr(m, "message", None) or "").strip()
-        if text and not baseline_only and is_match(text, cfg.include, cfg.exclude):
+        if saved and text.startswith(OWN_ALERT_PREFIXES):
+            text = ""  # the collector's own alerts live in Saved Messages too; never re-import them
+        # In Saved Messages you chose what to forward, so everything counts (no keyword filter).
+        if text and not baseline_only and (saved or is_match(text, cfg.include, cfg.exclude)):
             fp = fingerprint(text)
             if not state.was_seen(fp):
-                url = post_url(entity, m.id)
-                await notify(format_alert(title, text, url, cfg.max_chars))
-                if store is not None and (getattr(entity, "username", None) or store.allow_private):  # private groups only when encrypted
+                url = None if saved else post_url(entity, m.id)
+                if not saved:  # no point alerting you about a message already in your Saved Messages
+                    await notify(format_alert(title, text, url, cfg.max_chars))
+                if store is not None and (public or store.allow_private):  # private chats only when encrypted
                     store.add(make_job(title, text, url, getattr(m, "date", None)))
                 state.mark_seen(fp)
                 sent += 1

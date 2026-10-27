@@ -4,6 +4,7 @@
 # or the numeric id for private groups (run `python alerts/setup.py` to list your chats with ids).
 telegram_chats = [
   "-1004427381551",  # Premium Membership (private)
+  "me",              # your Saved Messages: forward WhatsApp job posts here and they appear on the website
 ]
 
 # YouTube channels: channel URL, @handle, or channel id (UC...).
