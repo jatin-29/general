@@ -2,7 +2,7 @@ name: Job alerts
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 min (GitHub may delay runs a few minutes)
+    - cron: "13,43 * * * *"   # every 30 min, at :13 and :43 (GitHub drops/delays runs at the busy :00 and :30)
   workflow_dispatch:
     inputs:
       send_test:
