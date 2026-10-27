@@ -80,6 +80,51 @@ def bot_notifier(token: str, chat_id: str):
     return notify
 
 
+class Outbox:
+    """Collects alerts during a run and sends them at the end, several per Telegram message.
+
+    Sending one message per job hit Telegram's flood limit ("A wait of N seconds is required"), which used to
+    abort the whole chat. The website is updated before anything is sent, so a failed send only loses alerts.
+    """
+
+    def __init__(self, send, limit: int = 3800, pause: float = 2.0):
+        self.send, self.limit, self.pause = send, limit, pause
+        self.items: list[str] = []
+
+    async def add(self, text: str) -> None:
+        self.items.append(text[: self.limit])
+
+    def batches(self) -> list[str]:
+        out, cur = [], ""
+        for t in self.items:
+            joined = f"{cur}\n\n· · ·\n\n{t}" if cur else t
+            if cur and len(joined) > self.limit:
+                out.append(cur)
+                cur = t
+            else:
+                cur = joined
+        return out + ([cur] if cur else [])
+
+    async def flush(self) -> int:
+        """Returns how many Telegram messages went out."""
+        batches, sent = self.batches(), 0
+        for i, text in enumerate(batches):
+            for attempt in (1, 2):
+                try:
+                    await self.send(text)
+                    sent += 1
+                    break
+                except Exception as e:
+                    wait = getattr(e, "seconds", None)  # Telethon FloodWaitError
+                    if wait is not None and wait <= 60 and attempt == 1:
+                        await asyncio.sleep(wait + 1)
+                        continue
+                    log.warning("Telegram refused more alerts (%s); %d batch(es) not sent. The website is up to date.", e, len(batches) - i)
+                    return sent
+            await asyncio.sleep(self.pause)
+        return sent
+
+
 # ---------------------------------------------------------------- Telegram
 def clean_ref(ref: str):
     ref = ref.strip().removeprefix("https://t.me/").removeprefix("http://t.me/").removeprefix("@")
@@ -127,11 +172,11 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
             fp = fingerprint(text)
             if not state.was_seen(fp):
                 url = None if saved else post_url(entity, m.id)
-                if not saved:  # no point alerting you about a message already in your Saved Messages
-                    await notify(format_alert(title, text, url, cfg.max_chars))
                 if store is not None and (public or store.allow_private):  # private chats only when encrypted
                     if store.add(make_job(title, text, url, getattr(m, "date", None))):
                         seen["web"] += 1
+                if not saved:  # no point alerting you about a message already in your Saved Messages
+                    await notify(format_alert(title, text, url, cfg.max_chars))
                 state.mark_seen(fp)
                 sent += 1
             else:
@@ -210,9 +255,9 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
             fp = fingerprint(text)
             if not state.was_seen(fp):
                 body = f"{v['title']}\n{html.unescape(v['description'])}"
-                await notify(format_alert(f"YouTube: {ref}", body[:400], v["url"], cfg.max_chars))
                 if store is not None:
                     store.add(make_job(f"YouTube: {ref}", body, v["url"]))
+                await notify(format_alert(f"YouTube: {ref}", body[:400], v["url"], cfg.max_chars))
                 state.mark_seen(fp)
                 sent += 1
         seen_ids.append(v["id"])
@@ -266,10 +311,11 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
 
         if not (cfg.telegram_chats or cfg.youtube_channels):
             log.warning("Nothing to watch yet: add chats/channels to alerts/config.toml")
+        outbox = Outbox(notify, pause=0 if dry_run else 2.0)
         total = 0
         for ref in cfg.telegram_chats:
             try:
-                n = await check_telegram(client, ref, state, cfg, notify, store)
+                n = await check_telegram(client, ref, state, cfg, outbox.add, store)
                 log.info("telegram %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
@@ -277,13 +323,14 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
                 log.error("telegram %s failed: %s", ref, e)
         for ref in cfg.youtube_channels:
             try:
-                n = await check_youtube(ref, state, cfg, notify, env.get("YOUTUBE_API_KEY", ""), store=store)
+                n = await check_youtube(ref, state, cfg, outbox.add, env.get("YOUTUBE_API_KEY", ""), store=store)
                 log.info("youtube %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
                 errors += 1
                 log.error("youtube %s failed: %s", ref, e)
-        log.info("done: %d alert(s) sent, %d source(s) failed", total, errors)
+        messages = await outbox.flush()
+        log.info("done: %d new job(s), sent as %d Telegram message(s); %d source(s) failed", total, messages, errors)
         return errors
     finally:
         if client:

@@ -249,3 +249,60 @@ def test_saved_messages_inbox():
     assert plain.jobs == []  # never stored in plain text
     assert len(enc.jobs) == 1 and enc.jobs[0]["source"] == "Saved Messages" and "Acme walk-in" in enc.jobs[0]["text"]
     assert enc.jobs[0]["post_url"] is None  # the collector's own 📌/✅ messages were ignored
+
+
+# ---------------------------------------------------------------- bundled alerts (Telegram flood limit)
+class FloodWait(Exception):
+    def __init__(self, seconds):
+        super().__init__(f"A wait of {seconds} seconds is required")
+        self.seconds = seconds
+
+
+def test_outbox_bundles_many_jobs_into_few_messages():
+    sent = []
+
+    async def send(t):
+        sent.append(t)
+
+    box = run.Outbox(send, pause=0)
+    for i in range(25):
+        run_async(box.add(f"📌 Premium\n\nJob {i} " + "x" * 600))
+    assert run_async(box.flush()) == len(sent) and len(sent) <= 6  # 25 jobs, not 25 messages
+    assert all(len(t) <= 3800 and t.startswith("📌") for t in sent)  # each starts like an own alert, so "me" skips it
+    assert sum(t.count("📌") for t in sent) == 25
+
+
+def test_outbox_survives_flood_limit(monkeypatch):
+    calls = []
+
+    async def no_sleep(s):
+        calls.append(("sleep", s))
+
+    monkeypatch.setattr(run.asyncio, "sleep", no_sleep)
+    attempts = {"n": 0}
+
+    async def short_wait_then_ok(t):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise FloodWait(5)
+
+    box = run.Outbox(short_wait_then_ok, pause=0)
+    run_async(box.add("📌 a"))
+    assert run_async(box.flush()) == 1 and ("sleep", 6) in calls  # short waits are waited out
+
+    async def long_wait(t):
+        raise FloodWait(296)
+
+    box = run.Outbox(long_wait, pause=0)
+    run_async(box.add("📌 a"))
+    assert run_async(box.flush()) == 0  # long waits: give up quietly, no exception
+
+
+def test_website_updated_even_if_alerts_fail():
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    tg = FakeTelegram({"-100": (private, [(1, "hiring A https://a.co/1"), (2, "hiring B https://b.co/2")])})
+    store = JobStore(password="pw")
+    sent, notify = make_notifier(fail_on="b.co")
+    with pytest.raises(RuntimeError):
+        run_async(run.check_telegram(tg, "-100", State(), Config(include=["hiring"], first_run_backfill=5), notify, store))
+    assert len(store.jobs) == 2  # stored before the alert was attempted
