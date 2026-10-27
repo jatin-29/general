@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import run  # noqa: E402
-from core import Config, State, extract_links, fingerprint, format_alert, is_match, load_config, parse_feed  # noqa: E402
+from core import Config, JobStore, State, extract_links, fingerprint, format_alert, is_match, load_config, parse_feed  # noqa: E402
 
 CFG = Config(include=["hiring", "intern", "internship", "recruit*"], exclude=["course", "webinar"], first_run_backfill=2)
 
@@ -56,7 +56,8 @@ class FakeTelegram:
         self.chats = chats  # ref -> (entity, [(id, text)])
 
     async def get_entity(self, ref):
-        return (self.chats.get(ref) or self.chats["@" + str(ref)])[0]  # run.py strips the '@'
+        found = self.chats.get(ref) or self.chats.get(str(ref)) or self.chats["@" + str(ref)]  # run.py strips '@', ids become ints
+        return found[0]
 
     async def iter_messages(self, entity, limit=None, min_id=None):
         rows = next(m for e, m in self.chats.values() if e is entity)
@@ -172,3 +173,26 @@ def test_session_string_is_cleaned_and_validated():
     env = {"TELEGRAM_API_ID": "1", "TELEGRAM_API_HASH": "h", "TELEGRAM_SESSION_STRING": "1" + "A" * 200}
     with pytest.raises(run.AuthError, match="200|201"):
         run_async(run.run_once(Config(), State(), env))
+
+
+def test_store_only_public_channels_and_dedupes(tmp_path):
+    msgs = [(1, "hiring Acme https://acme.com/j/1")]
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    tg = FakeTelegram({"@pub": (entity("Pub"), msgs), "-100": (private, [(1, "hiring Secret https://secret.com/j")])})
+    state, (sent, notify) = State(), make_notifier()
+    store = JobStore()
+    cfg = Config(include=["hiring"], first_run_backfill=5)
+    run_async(run.check_telegram(tg, "@pub", state, cfg, notify, store))
+    run_async(run.check_telegram(tg, "-100", state, cfg, notify, store))
+    assert len(sent) == 2  # both reach Saved Messages
+    assert [j["apply_link"] for j in store.jobs] == ["https://acme.com/j/1"]  # private group is NOT published
+    assert store.jobs[0]["post_url"] == "https://t.me/pub/1" and store.jobs[0]["source"] == "Pub"
+    assert store.add(dict(store.jobs[0])) is False  # same job twice
+
+    path = tmp_path / "data" / "jobs.json"
+    store.save(path)
+    assert JobStore.load(path).jobs[0]["id"] == store.jobs[0]["id"]
+    empty = JobStore()
+    other = tmp_path / "none.json"
+    empty.save(other)
+    assert not other.exists()  # nothing new => no file change => no commit

@@ -28,9 +28,8 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          # No API_URL variable => demo mode with sample data
-          NEXT_PUBLIC_API_URL: ${{ vars.API_URL }}
-          NEXT_PUBLIC_DEMO: ${{ vars.API_URL == '' && 'true' || 'false' }}
+          # The site reads the job list collected by the "Job alerts" workflow
+          NEXT_PUBLIC_JOBS_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/data/jobs.json
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
         run: |
           npm ci

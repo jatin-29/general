@@ -4,6 +4,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
 import ThemeToggle from "@/components/ThemeToggle";
 import { DEMO } from "@/lib/demo";
+import { JOBS_MODE } from "@/lib/mode";
 
 export const metadata: Metadata = {
   title: "OpeningsHub",
@@ -26,6 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Openings<span className="text-indigo-600">Hub</span>
               </Link>
               <nav className="ml-auto flex items-center gap-2 text-sm">
+                {!JOBS_MODE && (
+                  <>
                 <Link href="/" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Dashboard
                 </Link>
@@ -38,11 +41,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/settings" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Settings
                 </Link>
+                  </>
+                )}
                 <ThemeToggle />
               </nav>
             </div>
           </header>
-          {DEMO && (
+          {DEMO && !JOBS_MODE && (
             <div className="bg-amber-100 px-4 py-2 text-center text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               Demo mode: showing sample data. Connect a backend (set <code>API_URL</code>) to see real openings.
             </div>

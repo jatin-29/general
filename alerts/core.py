@@ -131,3 +131,57 @@ def parse_feed(xml_text: str) -> list[dict]:
             "url": link.get("href") if link is not None else f"https://www.youtube.com/watch?v={vid}",
         })
     return out
+
+
+# ---------------------------------------------------------------- stored jobs (data/jobs.json, shown on the website)
+MAX_JOBS = 1000
+MAX_STORED_CHARS = 2500
+
+
+def make_job(source: str, text: str, post_url: str | None, posted_at=None, now=None) -> dict:
+    """One listing as stored in jobs.json."""
+    from datetime import datetime, timezone
+
+    links = [u for u in extract_links(text) if "t.me/" not in u]
+    fp = fingerprint(text)
+    return {
+        "id": hashlib.sha1(fp.encode()).hexdigest()[:12],
+        "fingerprint": fp,
+        "source": source,
+        "text": text.strip()[:MAX_STORED_CHARS],
+        "apply_link": links[0] if links else None,
+        "post_url": post_url,
+        "posted_at": posted_at.astimezone(timezone.utc).isoformat(timespec="seconds") if posted_at else None,
+        "added_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+    }
+
+
+class JobStore:
+    """Collected jobs, newest first."""
+
+    def __init__(self, jobs: list[dict] | None = None):
+        self.jobs: list[dict] = jobs or []
+        self.new = 0
+
+    @classmethod
+    def load(cls, path: str | Path) -> "JobStore":
+        try:
+            return cls(json.loads(Path(path).read_text(encoding="utf-8")).get("jobs", []))
+        except (OSError, ValueError):
+            return cls()
+
+    def add(self, job: dict) -> bool:
+        if any(j["fingerprint"] == job["fingerprint"] for j in self.jobs):
+            return False
+        self.jobs.insert(0, job)
+        self.new += 1
+        return True
+
+    def save(self, path: str | Path) -> None:
+        from datetime import datetime, timezone
+
+        if not self.new:
+            return  # nothing new: leave the file alone so no commit is made
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "jobs": self.jobs[:MAX_JOBS]}
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")

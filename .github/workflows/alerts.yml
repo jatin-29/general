@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # lets the job save data/jobs.json, which the website shows
 
 jobs:
   check:
@@ -50,6 +50,18 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+
+      # New public-channel posts are written to data/jobs.json; commit it so the website can show them.
+      - name: Publish new jobs for the website
+        run: |
+          if [ -n "$(git status --porcelain data/jobs.json)" ]; then
+            git config user.name "job-collector"
+            git config user.email "actions@users.noreply.github.com"
+            git add data/jobs.json
+            git commit -m "Update jobs"
+            git pull --rebase origin "${{ github.ref_name }}"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
 
       - uses: actions/cache/save@v4
         if: always() && hashFiles('alerts/state.json') != ''

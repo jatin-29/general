@@ -18,7 +18,9 @@ from pathlib import Path
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from core import Config, State, fingerprint, format_alert, is_match, load_config, parse_feed  # noqa: E402
+from core import (  # noqa: E402
+    Config, JobStore, State, fingerprint, format_alert, is_match, load_config, make_job, parse_feed,
+)
 
 log = logging.getLogger("alerts")
 HERE = Path(__file__).resolve().parent
@@ -89,7 +91,7 @@ def post_url(entity, msg_id: int) -> str | None:
     return None
 
 
-async def check_telegram(client, ref: str, state: State, cfg: Config, notify) -> int:
+async def check_telegram(client, ref: str, state: State, cfg: Config, notify, store: JobStore | None = None) -> int:
     """Send alerts for new matching messages. Returns how many were sent.
 
     The saved position only moves past a message after it was handled, so a failed send is retried next run.
@@ -113,7 +115,10 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify) ->
         if text and not baseline_only and is_match(text, cfg.include, cfg.exclude):
             fp = fingerprint(text)
             if not state.was_seen(fp):
-                await notify(format_alert(title, text, post_url(entity, m.id), cfg.max_chars))
+                url = post_url(entity, m.id)
+                await notify(format_alert(title, text, url, cfg.max_chars))
+                if store is not None and getattr(entity, "username", None):  # website shows public channels only
+                    store.add(make_job(title, text, url, getattr(m, "date", None)))
                 state.mark_seen(fp)
                 sent += 1
         state.telegram[key] = m.id
@@ -166,7 +171,7 @@ def fetch_videos(channel_id: str, api_key: str = "") -> list[dict]:
     return out
 
 
-async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: str = "", videos=None) -> int:
+async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: str = "", videos=None, store: JobStore | None = None) -> int:
     cid = resolve_channel(ref, state)
     vids = videos if videos is not None else fetch_videos(cid, api_key)
     seen_ids = state.youtube.get(cid)
@@ -183,7 +188,10 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
         if (eligible is None or v["id"] in eligible) and is_match(text, cfg.include, cfg.exclude):
             fp = fingerprint(text)
             if not state.was_seen(fp):
-                await notify(format_alert(f"YouTube: {ref}", f"{v['title']}\n{html.unescape(v['description'])[:400]}", v["url"], cfg.max_chars))
+                body = f"{v['title']}\n{html.unescape(v['description'])}"
+                await notify(format_alert(f"YouTube: {ref}", body[:400], v["url"], cfg.max_chars))
+                if store is not None:
+                    store.add(make_job(f"YouTube: {ref}", body, v["url"]))
                 state.mark_seen(fp)
                 sent += 1
         seen_ids.append(v["id"])
@@ -193,7 +201,7 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
 
 
 # ---------------------------------------------------------------- main
-async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False) -> int:
+async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False, store: JobStore | None = None) -> int:
     client = None
     session = clean_session(env.get("TELEGRAM_SESSION_STRING", ""))
     api_id, api_hash = env.get("TELEGRAM_API_ID", ""), env.get("TELEGRAM_API_HASH", "")
@@ -240,7 +248,7 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
         total = 0
         for ref in cfg.telegram_chats:
             try:
-                n = await check_telegram(client, ref, state, cfg, notify)
+                n = await check_telegram(client, ref, state, cfg, notify, store)
                 log.info("telegram %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
@@ -248,7 +256,7 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
                 log.error("telegram %s failed: %s", ref, e)
         for ref in cfg.youtube_channels:
             try:
-                n = await check_youtube(ref, state, cfg, notify, env.get("YOUTUBE_API_KEY", ""))
+                n = await check_youtube(ref, state, cfg, notify, env.get("YOUTUBE_API_KEY", ""), store=store)
                 log.info("youtube %s: %d alert(s)", ref, n)
                 total += n
             except Exception as e:
@@ -267,6 +275,7 @@ def main() -> int:
     ap.add_argument("--state", default=str(HERE / "state.json"))
     ap.add_argument("--test", action="store_true", help="send a test message and exit")
     ap.add_argument("--dry-run", action="store_true", help="print alerts instead of sending; don't save state")
+    ap.add_argument("--jobs", default=str(HERE.parent / "data" / "jobs.json"), help="where the website's job list is stored")
     ap.add_argument("--fresh", action="store_true", help="forget what was already sent and resend the latest posts")
     ap.add_argument("--loop", type=int, metavar="MINUTES", help="repeat forever")
     args = ap.parse_args()
@@ -274,14 +283,16 @@ def main() -> int:
 
     while True:
         cfg, state = load_config(args.config), (State() if args.fresh else State.load(args.state))
+        store = JobStore.load(args.jobs)
         try:
-            errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test))
+            errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test, store))
         except AuthError as e:
             log.error("%s", e)
             return 2
         finally:
             if not (args.dry_run or args.test):
                 state.save(args.state)  # always keep progress, even if some sources failed
+                store.save(args.jobs)
         if not args.loop:
             return 1 if errors and not args.dry_run and errors >= len(cfg.telegram_chats) + len(cfg.youtube_channels) else 0
         time.sleep(args.loop * 60)
