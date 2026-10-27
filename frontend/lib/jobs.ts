@@ -1,3 +1,4 @@
+import { decryptEnvelope, type Envelope } from "./crypto";
 import { JOBS_URL } from "./mode";
 
 export interface Job {
@@ -15,7 +16,11 @@ export interface JobsFile {
   jobs: Job[];
 }
 
-export async function fetchJobs(): Promise<JobsFile> {
+export class PasswordRequired extends Error {}
+export class WrongPassword extends Error {}
+
+/** Plain jobs.json, or the encrypted one (needs the password you set as SITE_PASSWORD). */
+export async function fetchJobs(password = ""): Promise<JobsFile> {
   let res: Response;
   try {
     res = await fetch(`${JOBS_URL}?t=${Date.now()}`, { cache: "no-store" });
@@ -24,7 +29,16 @@ export async function fetchJobs(): Promise<JobsFile> {
   }
   if (res.status === 404) return { updated_at: null, jobs: [] }; // no job collected yet
   if (!res.ok) throw new Error(`Could not load jobs (${res.status}).`);
-  const data = (await res.json()) as Partial<JobsFile>;
+  let data = (await res.json()) as Partial<JobsFile> & Partial<Envelope>;
+  if (data.v) {
+    if (!password) throw new PasswordRequired();
+    try {
+      const inner = await decryptEnvelope<JobsFile>(data as Envelope, password);
+      data = { ...inner, updated_at: inner.updated_at ?? data.updated_at };
+    } catch {
+      throw new WrongPassword();
+    }
+  }
   return { updated_at: data.updated_at ?? null, jobs: data.jobs ?? [] };
 }
 

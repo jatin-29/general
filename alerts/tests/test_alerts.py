@@ -196,3 +196,36 @@ def test_store_only_public_channels_and_dedupes(tmp_path):
     other = tmp_path / "none.json"
     empty.save(other)
     assert not other.exists()  # nothing new => no file change => no commit
+
+
+# ---------------------------------------------------------------- encrypted job list
+def test_encryption_roundtrip_and_wrong_password(tmp_path):
+    from core import StoreLocked, decrypt_payload, encrypt_payload
+
+    env = encrypt_payload({"jobs": [{"text": "secret post"}]}, "pw-1")
+    assert "secret post" not in str(env) and decrypt_payload(env, "pw-1") == {"jobs": [{"text": "secret post"}]}
+    with pytest.raises(Exception):
+        decrypt_payload(env, "wrong")
+
+    store = JobStore(password="pw-1")
+    store.add({"fingerprint": "f", "id": "i", "text": "members only post"})
+    path = tmp_path / "jobs.json"
+    store.save(path)
+    assert "members only post" not in path.read_text()  # unreadable without the password
+    assert JobStore.load(path, "pw-1").jobs[0]["text"] == "members only post"
+    with pytest.raises(StoreLocked):
+        JobStore.load(path, None)  # must not silently start empty and overwrite it
+    with pytest.raises(StoreLocked):
+        JobStore.load(path, "wrong")
+
+
+def test_private_group_is_stored_only_when_encrypted():
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    tg = FakeTelegram({"-100": (private, [(1, "hiring Secret https://secret.com/j")])})
+    cfg = Config(include=["hiring"], first_run_backfill=5)
+    plain, enc = JobStore(), JobStore(password="pw")
+    for store in (plain, enc):
+        sent, notify = make_notifier()
+        run_async(run.check_telegram(tg, "-100", State(), cfg, notify, store))
+        assert len(sent) == 1  # always reaches Saved Messages
+    assert plain.jobs == [] and len(enc.jobs) == 1

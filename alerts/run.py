@@ -19,7 +19,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
-    Config, JobStore, State, fingerprint, format_alert, is_match, load_config, make_job, parse_feed,
+    Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_match, load_config, make_job, parse_feed,
 )
 
 log = logging.getLogger("alerts")
@@ -117,7 +117,7 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
             if not state.was_seen(fp):
                 url = post_url(entity, m.id)
                 await notify(format_alert(title, text, url, cfg.max_chars))
-                if store is not None and getattr(entity, "username", None):  # website shows public channels only
+                if store is not None and (getattr(entity, "username", None) or store.allow_private):  # private groups only when encrypted
                     store.add(make_job(title, text, url, getattr(m, "date", None)))
                 state.mark_seen(fp)
                 sent += 1
@@ -283,7 +283,12 @@ def main() -> int:
 
     while True:
         cfg, state = load_config(args.config), (State() if args.fresh else State.load(args.state))
-        store = JobStore.load(args.jobs)
+        password = os.environ.get("SITE_PASSWORD", "").strip() or None
+        try:
+            store = JobStore.load(args.jobs, password)
+        except StoreLocked as e:
+            log.error("%s Jobs are still sent to Telegram, but the website list is not updated.", e)
+            store = None
         try:
             errors = asyncio.run(run_once(cfg, state, dict(os.environ), args.dry_run, args.test, store))
         except AuthError as e:
@@ -292,7 +297,8 @@ def main() -> int:
         finally:
             if not (args.dry_run or args.test):
                 state.save(args.state)  # always keep progress, even if some sources failed
-                store.save(args.jobs)
+                if store is not None:
+                    store.save(args.jobs)
         if not args.loop:
             return 1 if errors and not args.dry_run and errors >= len(cfg.telegram_chats) + len(cfg.youtube_channels) else 0
         time.sleep(args.loop * 60)

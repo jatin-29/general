@@ -35,6 +35,16 @@ Nothing to host, no website, no AI, no cost.
 
 After that it runs by itself every 30 minutes. Edit `include` / `exclude` in `config.toml` to tune what counts as a job.
 
+## Website (private, password-protected)
+
+New posts are also saved to `data/jobs.json`, and the website shows them as cards. Because the repo and site are
+public, add a GitHub secret named **`SITE_PASSWORD`** (a long password you choose, 12+ characters). With it set:
+- the file is stored **encrypted**, so nobody can read it without the password;
+- posts from **private groups** are included (without it, they are never put on the website);
+- the website asks for the password once per device and decrypts the jobs in your browser.
+If you change the password, clear `data/jobs.json` (set it to `{"updated_at": null, "jobs": []}`) first.
+Your "Applied" ticks are saved only in your browser.
+
 ## Good to know
 
 - The first run sends only the latest few posts per group (`first_run_backfill`), then only new ones.

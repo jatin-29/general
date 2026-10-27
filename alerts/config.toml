@@ -3,8 +3,6 @@
 # Telegram groups/channels you have joined (or public ones). Use @username, a t.me link,
 # or the numeric id for private groups (run `python alerts/setup.py` to list your chats with ids).
 telegram_chats = [
-  "@job4fresherss",
-  "@jobsandinternshipsupdates",
   "-1004427381551",  # Premium Membership (private)
 ]
 

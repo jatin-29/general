@@ -156,19 +156,70 @@ def make_job(source: str, text: str, post_url: str | None, posted_at=None, now=N
     }
 
 
-class JobStore:
-    """Collected jobs, newest first."""
+KDF_ITERATIONS = 200_000
 
-    def __init__(self, jobs: list[dict] | None = None):
+
+class StoreLocked(Exception):
+    """jobs.json is encrypted and the password is missing or wrong. Never overwrite it in that case."""
+
+
+def _derive_key(password: str, salt: bytes, iterations: int) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    return PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iterations).derive(password.encode())
+
+
+def encrypt_payload(payload: dict, password: str) -> dict:
+    """AES-256-GCM with a PBKDF2 key. The browser decrypts this with WebCrypto (see frontend/lib/crypto.ts)."""
+    import base64
+    import os
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    salt, nonce = os.urandom(16), os.urandom(12)
+    key = _derive_key(password, salt, KDF_ITERATIONS)
+    blob = AESGCM(key).encrypt(nonce, json.dumps(payload, ensure_ascii=False).encode(), None)  # ciphertext + tag
+    b64 = lambda b: base64.b64encode(b).decode()  # noqa: E731
+    return {"v": 1, "kdf": "pbkdf2-sha256", "iter": KDF_ITERATIONS, "salt": b64(salt), "nonce": b64(nonce), "data": b64(blob)}
+
+
+def decrypt_payload(envelope: dict, password: str) -> dict:
+    import base64
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    key = _derive_key(password, base64.b64decode(envelope["salt"]), int(envelope["iter"]))
+    return json.loads(AESGCM(key).decrypt(base64.b64decode(envelope["nonce"]), base64.b64decode(envelope["data"]), None))
+
+
+class JobStore:
+    """Collected jobs, newest first. Encrypted on disk when a password is set."""
+
+    def __init__(self, jobs: list[dict] | None = None, password: str | None = None):
         self.jobs: list[dict] = jobs or []
+        self.password = password or None
         self.new = 0
 
+    @property
+    def allow_private(self) -> bool:
+        """Posts from private groups may only be stored when they will be encrypted."""
+        return self.password is not None
+
     @classmethod
-    def load(cls, path: str | Path) -> "JobStore":
+    def load(cls, path: str | Path, password: str | None = None) -> "JobStore":
         try:
-            return cls(json.loads(Path(path).read_text(encoding="utf-8")).get("jobs", []))
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return cls()
+            return cls(password=password)
+        if raw.get("v"):  # encrypted file
+            if not password:
+                raise StoreLocked("data/jobs.json is encrypted but the SITE_PASSWORD secret is not set.")
+            try:
+                raw = decrypt_payload(raw, password)
+            except Exception as e:
+                raise StoreLocked("data/jobs.json could not be decrypted: SITE_PASSWORD is different from the one used before.") from e
+        return cls(raw.get("jobs", []), password)
 
     def add(self, job: dict) -> bool:
         if any(j["fingerprint"] == job["fingerprint"] for j in self.jobs):
@@ -183,5 +234,9 @@ class JobStore:
         if not self.new:
             return  # nothing new: leave the file alone so no commit is made
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "jobs": self.jobs[:MAX_JOBS]}
-        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        payload = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "jobs": self.jobs[:MAX_JOBS]}
+        if self.password:
+            out = {**encrypt_payload(payload, self.password), "updated_at": payload["updated_at"]}
+        else:
+            out = payload
+        Path(path).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")

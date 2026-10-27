@@ -50,6 +50,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
 
       # New public-channel posts are written to data/jobs.json; commit it so the website can show them.
       - name: Publish new jobs for the website

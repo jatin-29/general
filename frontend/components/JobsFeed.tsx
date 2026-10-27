@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { fetchJobs, jobBody, jobTitle, timeAgo, type Job } from "@/lib/jobs";
+import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, timeAgo, type Job } from "@/lib/jobs";
 
 const PAGE = 30;
 const REFRESH_MS = 5 * 60_000;
@@ -90,31 +90,47 @@ export default function JobsFeed() {
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [lastVisit, setLastVisit] = useState<number>(0);
   const [shown, setShown] = useState(PAGE);
+  const [password, setPassword] = useState("");
+  const [locked, setLocked] = useState<"no" | "need" | "wrong">("no");
+  const [ready, setReady] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (pw: string = password) => {
     try {
-      const f = await fetchJobs();
+      const f = await fetchJobs(pw);
       setJobs(f.jobs);
       setUpdatedAt(f.updated_at);
       setError(null);
+      setLocked("no");
+      if (pw) save("jobs_pw", pw); // remembered in this browser so you don't retype it
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load jobs");
+      if (e instanceof PasswordRequired) setLocked("need");
+      else if (e instanceof WrongPassword) {
+        setLocked("wrong");
+        save("jobs_pw", "");
+      } else setError(e instanceof Error ? e.message : "Could not load jobs");
     }
+  }, [password]);
+
+  useEffect(() => {
+    setPassword(load<string>("jobs_pw", ""));
+    setReady(true);
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     setApplied(new Set(load<string[]>("jobs_applied", [])));
     setLastVisit(load<number>("jobs_last_visit", 0));
     const leave = () => save("jobs_last_visit", Date.now()); // "New" = arrived since you last visited
     window.addEventListener("pagehide", leave);
     refresh();
-    const id = setInterval(refresh, REFRESH_MS);
+    const id = setInterval(() => refresh(), REFRESH_MS);
     return () => {
       leave();
       window.removeEventListener("pagehide", leave);
       clearInterval(id);
     };
-  }, [refresh]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, password]);
 
   const toggle = (id: string) =>
     setApplied((prev) => {
@@ -134,6 +150,26 @@ export default function JobsFeed() {
 
   useEffect(() => setShown(PAGE), [search, source, hideApplied]);
 
+  if (locked !== "no") {
+    return (
+      <form
+        className="card mx-auto max-w-sm space-y-3 p-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const pw = (new FormData(e.currentTarget).get("pw") as string) ?? "";
+          setPassword(pw);
+          refresh(pw);
+        }}
+      >
+        <h1 className="text-lg font-semibold">🔒 Enter password</h1>
+        <p className="text-sm text-slate-500">These jobs are private. Enter the password you set up (it is remembered on this device).</p>
+        <input name="pw" type="password" autoComplete="current-password" autoFocus className="input" placeholder="Password" aria-label="Password" />
+        {locked === "wrong" && <p className="text-sm text-red-600 dark:text-red-400">Wrong password. Try again.</p>}
+        <button className="btn-primary w-full">Unlock</button>
+      </form>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="card grid gap-3 p-4 sm:grid-cols-[1fr_12rem]">
@@ -152,14 +188,15 @@ export default function JobsFeed() {
         <span>{jobs ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : " "}</span>
         <span>
           {updatedAt ? `Updated ${timeAgo(updatedAt)} · ` : ""}
-          <button onClick={refresh} className="text-indigo-600 hover:underline dark:text-indigo-400">Refresh</button>
+          <button onClick={() => refresh()} className="text-indigo-600 hover:underline dark:text-indigo-400">Refresh</button>
+          {password && <> · <button onClick={() => { save("jobs_pw", ""); setPassword(""); setJobs(null); setLocked("need"); }} className="text-indigo-600 hover:underline dark:text-indigo-400">Lock</button></>}
         </span>
       </div>
 
       {error && !jobs ? (
         <div className="card flex flex-col items-center gap-3 p-10 text-center">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          <button className="btn-ghost" onClick={refresh}>Retry</button>
+          <button className="btn-ghost" onClick={() => refresh()}>Retry</button>
         </div>
       ) : !jobs ? (
         <div className="space-y-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card h-36 animate-pulse bg-slate-100 dark:bg-slate-900" />)}</div>
