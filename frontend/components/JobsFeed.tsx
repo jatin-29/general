@@ -272,8 +272,9 @@ export default function JobsFeed() {
           onSubmit={(e) => {
             e.preventDefault();
             const pw = (new FormData(e.currentTarget).get("pw") as string) ?? "";
-            setPassword(pw);
-            refresh(pw);
+            // a new password re-runs the loading effect; the same one (a retry) needs an explicit load
+            if (pw === password) refresh(pw);
+            else setPassword(pw);
           }}
         >
           <h1 className="font-display text-2xl font-black">🔒 Enter password</h1>

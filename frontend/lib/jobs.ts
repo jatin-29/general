@@ -1,5 +1,5 @@
 import { decryptEnvelope, type Envelope } from "./crypto";
-import { JOBS_URL } from "./mode";
+import { JOBS_API_URL, JOBS_URL } from "./mode";
 
 export interface Job {
   id: string;
@@ -32,11 +32,20 @@ export class WrongPassword extends Error {}
 
 /** Plain jobs.json, or the encrypted one (needs the password you set as SITE_PASSWORD). */
 export async function fetchJobs(password = ""): Promise<JobsFile> {
-  let res: Response;
-  try {
-    res = await fetch(`${JOBS_URL}?t=${Date.now()}`, { cache: "no-store" });
-  } catch {
-    throw new Error("Could not load jobs. Check your internet connection.");
+  let res: Response | null = null;
+  if (JOBS_API_URL) {
+    try {
+      // "raw" media type returns the file itself; the API allows about 60 requests an hour per visitor
+      const r = await fetch(JOBS_API_URL, { cache: "no-store", headers: { Accept: "application/vnd.github.raw+json" } });
+      if (r.ok || r.status === 404) res = r;
+    } catch {}
+  }
+  if (!res) {
+    try {
+      res = await fetch(`${JOBS_URL}?t=${Date.now()}`, { cache: "no-store" });
+    } catch {
+      throw new Error("Could not load jobs. Check your internet connection.");
+    }
   }
   if (res.status === 404) return { updated_at: null, jobs: [] }; // no job collected yet
   if (!res.ok) throw new Error(`Could not load jobs (${res.status}).`);

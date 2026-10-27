@@ -30,6 +30,8 @@ jobs:
         env:
           # The site reads the job list collected by the "Job alerts" workflow
           NEXT_PUBLIC_JOBS_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/data/jobs.json
+          # Fresher copy (about 1 min instead of about 5); the site falls back to the URL above if the API refuses
+          NEXT_PUBLIC_JOBS_API_URL: https://api.github.com/repos/${{ github.repository }}/contents/data/jobs.json?ref=${{ github.event.repository.default_branch }}
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
         run: |
           npm ci

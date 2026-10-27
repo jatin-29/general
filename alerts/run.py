@@ -114,7 +114,7 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
     msgs.sort(key=lambda m: m.id)
 
     sent = 0
-    seen = {"no_text": 0, "own": 0, "no_match": 0, "dup": 0}
+    seen = {"no_text": 0, "own": 0, "no_match": 0, "dup": 0, "web": 0}
     for m in msgs:
         text = (getattr(m, "message", None) or "").strip()
         if not text:
@@ -130,7 +130,8 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
                 if not saved:  # no point alerting you about a message already in your Saved Messages
                     await notify(format_alert(title, text, url, cfg.max_chars))
                 if store is not None and (public or store.allow_private):  # private chats only when encrypted
-                    store.add(make_job(title, text, url, getattr(m, "date", None)))
+                    if store.add(make_job(title, text, url, getattr(m, "date", None))):
+                        seen["web"] += 1
                 state.mark_seen(fp)
                 sent += 1
             else:
@@ -139,8 +140,8 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
             seen["no_match"] += 1
         state.telegram[key] = m.id
     log.info(
-        "%s: looked at %d new message(s): %d collected, %d without text, %d own alerts, %d not matching keywords, %d duplicates",
-        ref, len(msgs), sent, seen["no_text"], seen["own"], seen["no_match"], seen["dup"],
+        "%s: looked at %d new message(s): %d collected (%d added to website), %d without text, %d own alerts, %d not matching keywords, %d duplicates",
+        ref, len(msgs), sent, seen["web"], seen["no_text"], seen["own"], seen["no_match"], seen["dup"],
     )
     if last is None and key not in state.telegram:
         state.telegram[key] = 0  # empty chat: remember we looked
@@ -306,6 +307,8 @@ def main() -> int:
         password = os.environ.get("SITE_PASSWORD", "").strip() or None
         try:
             store = JobStore.load(args.jobs, password)
+            for job in store.jobs:  # if the run memory (cache) is ever lost, don't alert about jobs already stored
+                state.mark_seen(job["fingerprint"])
         except StoreLocked as e:
             log.error("%s Jobs are still sent to Telegram, but the website list is not updated.", e)
             store = None
