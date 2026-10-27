@@ -45,6 +45,14 @@ public, add a GitHub secret named **`SITE_PASSWORD`** (a long password you choos
 If you change the password, clear `data/jobs.json` (set it to `{"updated_at": null, "jobs": []}`) first.
 Your "Applied" ticks are saved only in your browser.
 
+## Deleting jobs from the website
+
+Every card has a 🗑 button. The first time, the site asks for a GitHub key: use the same fine-grained token as
+cron-job.org (Actions: Read and write, only this repo). It is kept in that browser only. The site hides the card at
+once and starts the collector with the job's id; the collector removes it from the encrypted list and remembers it,
+so it never comes back (not even on a rescan). Jobs you added with the + button are only in your browser and are
+deleted there.
+
 ## WhatsApp posts
 
 WhatsApp can't be read automatically, so forward the posts you like to your **Saved Messages** in Telegram

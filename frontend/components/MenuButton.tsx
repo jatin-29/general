@@ -54,6 +54,7 @@ export default function MenuButton() {
           <div className="flex items-center justify-between rounded-xl px-3 py-1.5 text-sm font-semibold">
             Dark mode <ThemeToggle />
           </div>
+          {JOBS_MODE && <button className={item} onClick={act("openings:key")}>🔑 GitHub key (for delete)</button>}
           {JOBS_MODE && <button className={`${item} text-rose-600`} onClick={act("openings:lock")}>🔒 Lock</button>}
         </nav>
       )}

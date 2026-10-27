@@ -174,7 +174,8 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
         wanted = (saved or not is_excluded(text, cfg.exclude)) if accept_all else is_match(text, cfg.include, cfg.exclude)
         if text and not baseline_only and wanted:
             fp = fingerprint(text)
-            if not state.was_seen(fp):
+            deleted = store is not None and fp in store.deleted  # you deleted it on the website: never again
+            if not state.was_seen(fp) and not deleted:
                 url = None if saved else post_url(entity, m.id)
                 if store is not None and (public or store.allow_private):  # private chats only when encrypted
                     if store.add(make_job(title, text, url, getattr(m, "date", None))):
@@ -359,8 +360,12 @@ def main() -> int:
         password = os.environ.get("SITE_PASSWORD", "").strip() or None
         try:
             store = JobStore.load(args.jobs, password)
-            for job in store.jobs:  # if the run memory (cache) is ever lost, don't alert about jobs already stored
-                state.mark_seen(job["fingerprint"])
+            ids = [i.strip() for i in os.environ.get("DELETE_IDS", "").split(",") if i.strip()]
+            if ids:  # from the website's delete button (passed via env, never through the shell)
+                log.info("deleted %d of %d requested job(s) from the website", store.delete(ids), len(ids))
+            # if the run memory (cache) is ever lost, don't alert about stored or deleted jobs again
+            for fp in [j["fingerprint"] for j in store.jobs] + store.deleted:
+                state.mark_seen(fp)
         except StoreLocked as e:
             log.error("%s Jobs are still sent to Telegram, but the website list is not updated.", e)
             store = None

@@ -33,6 +33,9 @@ jobs:
           # Fresher copy (about 1 min instead of about 5); the site falls back to the URL above if the API refuses
           NEXT_PUBLIC_JOBS_API_URL: https://api.github.com/repos/${{ github.repository }}/contents/data/jobs.json?ref=${{ github.event.repository.default_branch }}
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          # The delete button asks the "Job alerts" workflow in this repo to remove a job
+          NEXT_PUBLIC_GH_REPO: ${{ github.repository }}
+          NEXT_PUBLIC_GH_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           npm ci
           npm run build

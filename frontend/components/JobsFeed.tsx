@@ -6,6 +6,9 @@ import { daysLeft, deadlineBadge, parseJobCached } from "@/lib/extract";
 import AddJobDialog from "./AddJobDialog";
 import CountUp from "./CountUp";
 import HeroVisual from "./HeroVisual";
+import TokenDialog from "./TokenDialog";
+import { useToast } from "./Toast";
+import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
 const PAGE = 24;
 const REFRESH_MS = 5 * 60_000;
@@ -116,7 +119,7 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
         ) : null}
         {job.apply_link && job.post_url && <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Original post</a>}
         {onDelete && (
-          <button type="button" className="btn-ghost ml-auto !px-3 text-rose-600" aria-label="Delete this job" title="Delete" onClick={() => confirm("Delete this job?") && onDelete()}>🗑</button>
+          <button type="button" className="btn-ghost ml-auto !px-3 text-rose-600" aria-label="Delete this job" title="Delete" onClick={() => confirm(job.manual ? "Delete this job?" : "Delete this job permanently? It will be removed from your site on every device.") && onDelete()}>🗑</button>
         )}
         <label className={`${onDelete ? "" : "ml-auto "}flex cursor-pointer select-none items-center gap-1.5 text-sm font-semibold`}>
           <input type="checkbox" checked={applied} onChange={onToggle} className="h-4 w-4 rounded" />
@@ -161,6 +164,9 @@ export default function JobsFeed() {
   const [ready, setReady] = useState(false);
   const [manual, setManual] = useState<Job[]>([]);
   const [adding, setAdding] = useState(false);
+  const [pending, setPendingState] = useState<Record<string, number>>({});
+  const [keyDialog, setKeyDialog] = useState<null | { reason?: string }>(null);
+  const toast = useToast();
 
   const refresh = useCallback(async (pw: string = password) => {
     try {
@@ -188,6 +194,7 @@ export default function JobsFeed() {
     if (!ready) return;
     setApplied(new Set(load<string[]>("jobs_applied", [])));
     setManual(load<Job[]>("jobs_manual", []));
+    setPendingState(getPending());
     setLastVisit(load<number>("jobs_last_visit", 0));
     const leave = () => save("jobs_last_visit", Date.now()); // "New" = arrived since you last visited
     window.addEventListener("pagehide", leave);
@@ -210,11 +217,14 @@ export default function JobsFeed() {
       setJobs(null);
       setLocked("need");
     };
+    const key = () => setKeyDialog({});
     window.addEventListener("openings:add", add);
     window.addEventListener("openings:lock", lock);
+    window.addEventListener("openings:key", key);
     return () => {
       window.removeEventListener("openings:add", add);
       window.removeEventListener("openings:lock", lock);
+      window.removeEventListener("openings:key", key);
     };
   }, []);
 
@@ -238,7 +248,48 @@ export default function JobsFeed() {
     save("jobs_manual", next);
   };
 
-  const all = useMemo(() => [...manual, ...(jobs ?? [])], [manual, jobs]);
+  const savePending = (p: Record<string, number>) => {
+    setPendingState(p);
+    setPending(p);
+  };
+
+  /** Ask the collector to remove these jobs for good. They stay hidden on this device meanwhile. */
+  const sendDeletes = async (p: Record<string, number>, quiet = false) => {
+    const ids = Object.keys(p);
+    if (!ids.length) return;
+    const token = getToken();
+    if (!token) {
+      if (!quiet) setKeyDialog({});
+      return;
+    }
+    try {
+      await dispatchDelete(ids, token);
+      savePending(Object.fromEntries(ids.map((id) => [id, Date.now()])));
+      if (!quiet) toast("Deleted. It disappears on all your devices within about a minute.", "success");
+    } catch (e) {
+      if (e instanceof TokenRejected) setKeyDialog({ reason: `${e.message} Check the key, then try again.` });
+      else if (!quiet) toast(`Hidden here, but ${e instanceof Error ? e.message : "the delete failed"} It will retry.`);
+    }
+  };
+
+  const deleteJob = (job: Job) => {
+    if (job.manual) return removeManual(job.id);
+    const next = { ...pending, [job.id]: Date.now() };
+    savePending(next);
+    if (remoteDeleteAvailable) sendDeletes(next);
+  };
+
+  // once the data no longer has a deleted job, forget it; if it is still there after a while, ask again
+  useEffect(() => {
+    if (!jobs) return;
+    const present = new Set(jobs.map((j) => j.id));
+    const left = Object.fromEntries(Object.entries(pending).filter(([id]) => present.has(id)));
+    if (Object.keys(left).length !== Object.keys(pending).length) savePending(left);
+    if (remoteDeleteAvailable && Object.values(left).some((t) => Date.now() - t > RETRY_MS)) sendDeletes(left, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs]);
+
+  const all = useMemo(() => [...manual, ...(jobs ?? []).filter((j) => !pending[j.id])], [manual, jobs, pending]);
   const deadlineOf = (j: Job) => (j.deadline ? parseIso(j.deadline) : parseJobCached(j.text).deadline);
   const isNewJob = useCallback((j: Job) => lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit, [lastVisit]);
   const isSoon = (j: Job) => {
@@ -354,7 +405,7 @@ export default function JobsFeed() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {visible.slice(0, shown).map((j, i) => (
-              <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={isNewJob(j)} />
+              <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
             ))}
             {visible.length > shown && (
               <button className="btn-pill justify-center self-start lg:col-span-2 lg:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
@@ -364,6 +415,16 @@ export default function JobsFeed() {
       </section>
 
       {adding && <AddJobDialog onClose={() => setAdding(false)} onSave={addManual} />}
+      {keyDialog && (
+        <TokenDialog
+          reason={keyDialog.reason}
+          onClose={() => setKeyDialog(null)}
+          onSaved={() => {
+            setKeyDialog(null);
+            sendDeletes(pending);
+          }}
+        />
+      )}
     </div>
   );
 }

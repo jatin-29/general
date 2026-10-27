@@ -141,7 +141,9 @@ def parse_feed(xml_text: str) -> list[dict]:
 
 # ---------------------------------------------------------------- stored jobs (data/jobs.json, shown on the website)
 MAX_JOBS = 1000
+MAX_DELETED = 5000
 MAX_STORED_CHARS = 2500
+JOB_ID = re.compile(r"^[0-9a-f]{12}$")
 
 
 def make_job(source: str, text: str, post_url: str | None, posted_at=None, now=None) -> dict:
@@ -202,10 +204,12 @@ def decrypt_payload(envelope: dict, password: str) -> dict:
 class JobStore:
     """Collected jobs, newest first. Encrypted on disk when a password is set."""
 
-    def __init__(self, jobs: list[dict] | None = None, password: str | None = None):
+    def __init__(self, jobs: list[dict] | None = None, password: str | None = None, deleted: list[str] | None = None):
         self.jobs: list[dict] = jobs or []
         self.password = password or None
+        self.deleted: list[str] = deleted or []  # fingerprints you deleted on the website; never added again
         self.new = 0
+        self.changed = False
 
     @property
     def allow_private(self) -> bool:
@@ -225,22 +229,36 @@ class JobStore:
                 raw = decrypt_payload(raw, password)
             except Exception as e:
                 raise StoreLocked("data/jobs.json could not be decrypted: SITE_PASSWORD is different from the one used before.") from e
-        return cls(raw.get("jobs", []), password)
+        return cls(raw.get("jobs", []), password, raw.get("deleted", []))
 
     def add(self, job: dict) -> bool:
-        if any(j["fingerprint"] == job["fingerprint"] for j in self.jobs):
+        if job["fingerprint"] in self.deleted or any(j["fingerprint"] == job["fingerprint"] for j in self.jobs):
             return False
         self.jobs.insert(0, job)
         self.new += 1
         return True
 
+    def delete(self, ids: list[str]) -> int:
+        """Remove jobs by id (the website's delete button) and remember them so they never come back."""
+        wanted = {i for i in ids if JOB_ID.match(i)}
+        gone = [j for j in self.jobs if j["id"] in wanted]
+        if gone:
+            self.jobs = [j for j in self.jobs if j["id"] not in wanted]
+            self.deleted.extend(j["fingerprint"] for j in gone if j["fingerprint"] not in self.deleted)
+            self.changed = True
+        return len(gone)
+
     def save(self, path: str | Path) -> None:
         from datetime import datetime, timezone
 
-        if not self.new:
+        if not (self.new or self.changed):
             return  # nothing new: leave the file alone so no commit is made
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        payload = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "jobs": self.jobs[:MAX_JOBS]}
+        payload = {
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "jobs": self.jobs[:MAX_JOBS],
+            "deleted": self.deleted[-MAX_DELETED:],
+        }
         if self.password:
             out = {**encrypt_payload(payload, self.password), "updated_at": payload["updated_at"]}
         else:

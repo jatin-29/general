@@ -332,3 +332,37 @@ def test_rescan_recovers_skipped_posts_without_duplicates_or_moving_back():
     assert run_async(run.check_telegram(tg, "-100", state, relaxed, notify, store, rescan=10)) == 2  # the 2 come back
     assert len(store.jobs) == 3 and state.telegram["-100"] == 3
     assert run_async(run.check_telegram(tg, "-100", state, relaxed, notify, store, rescan=10)) == 0  # no duplicates
+
+
+# ---------------------------------------------------------------- delete from the website
+def test_delete_removes_job_remembers_it_and_saves(tmp_path):
+    from core import make_job
+
+    store = JobStore(password="pw")
+    a, b = make_job("P", "hiring A https://a.co/1", None), make_job("P", "hiring B https://b.co/2", None)
+    store.add(a), store.add(b)
+    store.save(tmp_path / "j.json")
+    loaded = JobStore.load(tmp_path / "j.json", "pw")
+    assert loaded.delete([a["id"], "not-an-id", "$(rm -rf /)"]) == 1  # junk ids are ignored
+    loaded.save(tmp_path / "j.json")  # a delete alone must still be saved
+    again = JobStore.load(tmp_path / "j.json", "pw")
+    assert [j["id"] for j in again.jobs] == [b["id"]] and a["fingerprint"] in again.deleted
+    assert again.add(make_job("P", "hiring A https://a.co/1?utm_source=x", None)) is False  # never comes back
+
+
+def test_deleted_job_is_not_collected_again_on_rescan():
+    from core import make_job
+
+    private = SimpleNamespace(title="Premium", username=None, id=9)
+    tg = FakeTelegram({"-100": (private, [(1, "hiring A https://a.co/1"), (2, "hiring B https://b.co/2")])})
+    store, state = JobStore(password="pw"), State()
+    sent, notify = make_notifier()
+    cfg = Config(include=["hiring"], first_run_backfill=5)
+    run_async(run.check_telegram(tg, "-100", state, cfg, notify, store))
+    store.delete([make_job("P", "hiring A https://a.co/1", None)["id"]])
+    sent.clear()
+    assert run_async(run.check_telegram(tg, "-100", state, cfg, notify, store, rescan=10)) == 0
+    assert [j["apply_link"] for j in store.jobs] == ["https://b.co/2"] and sent == []
+    # even with the run memory lost, the deleted job is neither stored nor alerted again
+    run_async(run.check_telegram(tg, "-100", State(), cfg, notify, store))
+    assert all("a.co/1" not in t for t in sent) and len(store.jobs) == 1
