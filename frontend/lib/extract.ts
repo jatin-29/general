@@ -29,7 +29,7 @@ function tidy(s: string | undefined | null, max = 70): string | null {
   if (!s) return null;
   let v = cleanLine(s)
     .replace(/https?:\/\/\S+/g, "")
-    .replace(/\s*[\(\[].*$/, "") // trailing (batch, location) notes
+    .replace(/\s*[\(\[][^)\]]*[\)\]]/g, "") // drop (batch, location, FDE) notes but keep the words after them
     .split(/\s+[|\-–—]\s+|\s*[!:]\s|\s+apply\b/i)[0]
     .replace(/^(for|as|the)\s+/i, "")
     .replace(/[\s.,;:!\-–]+$/, "")
@@ -78,7 +78,7 @@ function parseDeadline(text: string, now: Date): Date | null {
 }
 
 function labelled(text: string, labels: string): string | null {
-  const m = new RegExp(`^[^\\p{L}\\p{N}]*(?:${labels})\\s*[:\\-–=]\\s*(.+)$`, "imu").exec(text);
+  const m = new RegExp(`^[^\\p{L}\\p{N}]*(?:\\d{1,2}[.)]\\s*)?[^\\p{L}\\p{N}]*(?:${labels})\\s*[:\\-–=]\\s*(.+)$`, "imu").exec(text);
   return m ? tidy(m[1]) : null;
 }
 
