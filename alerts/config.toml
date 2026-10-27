@@ -3,8 +3,9 @@
 # Telegram groups/channels you have joined (or public ones). Use @username, a t.me link,
 # or the numeric id for private groups (run `python alerts/setup.py` to list your chats with ids).
 telegram_chats = [
-  # "@some_jobs_channel",
-  # "-1001234567890",
+  "@job4fresherss",
+  "@jobsandinternshipsupdates",
+  # private group: add its id here, like "-1001234567890"
 ]
 
 # YouTube channels: channel URL, @handle, or channel id (UC...).
