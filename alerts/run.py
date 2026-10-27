@@ -30,6 +30,14 @@ class AuthError(Exception):
     pass
 
 
+VALID_SESSION_LENGTHS = (353, 369)  # Telethon login strings: IPv4 / IPv6 datacenter
+
+
+def clean_session(raw: str) -> str:
+    """Remove spaces, line breaks and quotes that sneak in when copy-pasting the string."""
+    return "".join(raw.split()).strip("'\"")
+
+
 # ---------------------------------------------------------------- http with retry
 def http_get(url: str, **kw) -> httpx.Response:
     last = None
@@ -187,11 +195,17 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
 # ---------------------------------------------------------------- main
 async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False) -> int:
     client = None
-    session = env.get("TELEGRAM_SESSION_STRING", "")
+    session = clean_session(env.get("TELEGRAM_SESSION_STRING", ""))
     api_id, api_hash = env.get("TELEGRAM_API_ID", ""), env.get("TELEGRAM_API_HASH", "")
     errors = 0
 
     if session and api_id and api_hash:
+        if len(session) not in VALID_SESSION_LENGTHS:
+            raise AuthError(
+                f"The TELEGRAM_SESSION_STRING secret has {len(session)} characters but a valid one has "
+                f"{VALID_SESSION_LENGTHS[0]}. It was probably cut off or is the wrong text. Make a new one and "
+                "update the secret, copying the WHOLE output."
+            )
         from telethon import TelegramClient
         from telethon.sessions import StringSession
 

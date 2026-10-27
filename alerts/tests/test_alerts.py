@@ -164,3 +164,11 @@ def test_main_requires_a_way_to_send():
         run_async(run.run_once(Config(), State(), {}))
     sent = []
     assert run_async(run.run_once(Config(), State(), {}, dry_run=True)) == 0  # dry run needs no credentials
+
+
+def test_session_string_is_cleaned_and_validated():
+    good = "1" + "A" * 352
+    assert run.clean_session(f'  "{good[:100]}\n{good[100:]}"  ') == good  # spaces/newlines/quotes removed
+    env = {"TELEGRAM_API_ID": "1", "TELEGRAM_API_HASH": "h", "TELEGRAM_SESSION_STRING": "1" + "A" * 200}
+    with pytest.raises(run.AuthError, match="200|201"):
+        run_async(run.run_once(Config(), State(), env))
