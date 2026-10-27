@@ -114,10 +114,14 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
     msgs.sort(key=lambda m: m.id)
 
     sent = 0
+    seen = {"no_text": 0, "own": 0, "no_match": 0, "dup": 0}
     for m in msgs:
         text = (getattr(m, "message", None) or "").strip()
+        if not text:
+            seen["no_text"] += 1  # photo, file, sticker...: nothing to read
         if saved and text.startswith(OWN_ALERT_PREFIXES):
             text = ""  # the collector's own alerts live in Saved Messages too; never re-import them
+            seen["own"] += 1
         # In Saved Messages you chose what to forward, so everything counts (no keyword filter).
         if text and not baseline_only and (saved or is_match(text, cfg.include, cfg.exclude)):
             fp = fingerprint(text)
@@ -129,7 +133,15 @@ async def check_telegram(client, ref: str, state: State, cfg: Config, notify, st
                     store.add(make_job(title, text, url, getattr(m, "date", None)))
                 state.mark_seen(fp)
                 sent += 1
+            else:
+                seen["dup"] += 1
+        elif text and not baseline_only:
+            seen["no_match"] += 1
         state.telegram[key] = m.id
+    log.info(
+        "%s: looked at %d new message(s): %d collected, %d without text, %d own alerts, %d not matching keywords, %d duplicates",
+        ref, len(msgs), sent, seen["no_text"], seen["own"], seen["no_match"], seen["dup"],
+    )
     if last is None and key not in state.telegram:
         state.telegram[key] = 0  # empty chat: remember we looked
     return sent
