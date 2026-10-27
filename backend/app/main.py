@@ -1,22 +1,27 @@
 import logging
 import secrets
+import uuid
 from contextlib import asynccontextmanager
+from datetime import date
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from . import runtime, telegram_login
 from .collectors import REGISTRY
-from .collectors.whatsapp import group_name_from_filename, parse_chat, to_raw_items
+from .collectors.youtube import ChannelNotFound, resolve_channel
 from .config import get_settings
 from .db import get_db, init_db
-from .extractor import LLM, AnthropicLLM
-from .pipeline import process_unprocessed, save_raw_items
-from .models import Opening, Source
+from .dedupe import find_duplicate, make_dedupe_key
+from .extractor import LLM, AnthropicLLM, extract_batch
+from .models import Opening, RawItem, Source
 from .schemas import (
-    OpeningDetail, OpeningList, OpeningOut, OpeningPatch, SourceCreate, SourceOut, SourcePatch,
-    UploadResult,
+    ExtractionOut, ExtractRequest, OpeningCreate, OpeningDetail, OpeningList, OpeningOut,
+    OpeningPatch, PhoneBody, SettingOut, SettingsUpdate, SignInBody, SourceCreate, SourceOut,
+    SourcePatch, TelegramChat,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -45,19 +50,27 @@ app.add_middleware(
 )
 
 
+# ---------------------------------------------------------------- auth
 def require_api_key(x_api_key: str = Header(default="")):
+    """Strict: endpoints that expose or change secrets, or spend money. Disabled until API_KEY is set."""
     key = get_settings().api_key
     if not key:
-        raise HTTPException(503, "API_KEY is not configured; endpoint disabled")
+        raise HTTPException(503, "API_KEY is not configured on the server; endpoint disabled")
     if not secrets.compare_digest(x_api_key, key):
-        raise HTTPException(401, "Invalid API key")
+        raise HTTPException(401, "Invalid or missing API key. Enter it in Settings.")
 
 
 def require_key_if_configured(x_api_key: str = Header(default="")):
-    """Mutating endpoints: open for local dev (no API_KEY set), locked once API_KEY is configured."""
+    """Other writes: open for local dev (no API_KEY set), locked once API_KEY is configured."""
     key = get_settings().api_key
     if key and not secrets.compare_digest(x_api_key, key):
-        raise HTTPException(401, "Invalid or missing API key")
+        raise HTTPException(401, "Invalid or missing API key. Enter it in Settings.")
+
+
+def get_llm() -> LLM:
+    if not runtime.effective_settings().anthropic_api_key:
+        raise HTTPException(503, "Anthropic API key is not set. Add it in Settings.")
+    return AnthropicLLM()
 
 
 @app.get("/api/health")
@@ -65,6 +78,7 @@ def health():
     return {"status": "ok"}
 
 
+# ---------------------------------------------------------------- openings
 @app.get("/api/openings", response_model=OpeningList)
 def list_openings(
     source: str | None = None,
@@ -105,6 +119,44 @@ def _get_opening(db: Session, opening_id: int) -> Opening:
     return o
 
 
+@app.post("/api/openings", response_model=OpeningOut, status_code=201, dependencies=[Depends(require_key_if_configured)])
+def create_opening(body: OpeningCreate, db: Session = Depends(get_db)):
+    """Manually add an opening."""
+    link = (body.apply_link or "").strip() or None
+    key = make_dedupe_key(link, body.company, body.role)
+    if find_duplicate(db, key):
+        raise HTTPException(409, "This opening is already in the list")
+    text = (body.notes or "").strip() or f"{body.role} at {body.company}" + (f"\nApply: {link}" if link else "")
+    raw = RawItem(
+        source_type="manual", source_name="manual", external_id=uuid.uuid4().hex,
+        text=text, processed=True,
+    )
+    db.add(raw)
+    db.flush()
+    o = Opening(
+        company=body.company.strip(), role=body.role.strip(), location=(body.location or "").strip() or None,
+        employment_type=body.employment_type, eligibility=(body.eligibility or "").strip() or None,
+        deadline=body.deadline, apply_link=link, source_type="manual", source_name="manual",
+        raw_item_id=raw.id, dedupe_key=key, is_expired=bool(body.deadline and body.deadline < date.today()),
+    )
+    try:
+        db.add(o)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "This opening is already in the list")
+    return o
+
+
+@app.post("/api/extract", response_model=ExtractionOut, dependencies=[Depends(require_api_key)])
+def extract_preview(body: ExtractRequest, llm: LLM = Depends(get_llm)):
+    """Paste a post, get the fields pre-filled for the manual-add form (nothing is saved)."""
+    result = extract_batch(llm, {0: body.text}).get(0)
+    if result is None:
+        raise HTTPException(502, "Could not read that post. Fill the form manually.")
+    return result
+
+
 @app.get("/api/openings/{opening_id}", response_model=OpeningDetail)
 def get_opening(opening_id: int, db: Session = Depends(get_db)):
     o = _get_opening(db, opening_id)
@@ -112,7 +164,7 @@ def get_opening(opening_id: int, db: Session = Depends(get_db)):
     return OpeningDetail(**data, raw_text=o.raw_item.text, source_url=o.raw_item.url)
 
 
-@app.patch("/api/openings/{opening_id}", response_model=OpeningOut)
+@app.patch("/api/openings/{opening_id}", response_model=OpeningOut, dependencies=[Depends(require_key_if_configured)])
 def patch_opening(opening_id: int, body: OpeningPatch, db: Session = Depends(get_db)):
     o = _get_opening(db, opening_id)
     o.applied = body.applied
@@ -120,6 +172,13 @@ def patch_opening(opening_id: int, body: OpeningPatch, db: Session = Depends(get
     return o
 
 
+@app.delete("/api/openings/{opening_id}", status_code=204, dependencies=[Depends(require_key_if_configured)])
+def delete_opening(opening_id: int, db: Session = Depends(get_db)):
+    db.delete(_get_opening(db, opening_id))
+    db.commit()
+
+
+# ---------------------------------------------------------------- sources
 @app.get("/api/sources", response_model=list[SourceOut])
 def list_sources(db: Session = Depends(get_db)):
     return db.scalars(select(Source).order_by(Source.id)).all()
@@ -130,28 +189,115 @@ def create_source(body: SourceCreate, db: Session = Depends(get_db)):
     if body.type not in REGISTRY:
         raise HTTPException(422, f"Unknown source type; expected one of {sorted(REGISTRY)}")
     ident = body.identifier.strip()
+    name = (body.name or "").strip() or None
     if body.type == "telegram":
         ident = ident.removeprefix("https://t.me/").removeprefix("@")
+    elif body.type == "youtube":
+        try:
+            ident, title = resolve_channel(ident)
+        except ChannelNotFound:
+            raise HTTPException(422, "Could not find that YouTube channel. Paste its URL, @handle or channel id (UC…).")
+        name = name or title
     if not ident:
         raise HTTPException(422, "identifier is required")
     if db.scalar(select(Source).where(Source.type == body.type, Source.identifier == ident)):
         raise HTTPException(409, "Source already exists")
-    s = Source(type=body.type, identifier=ident)
+    s = Source(type=body.type, identifier=ident, name=name)
     db.add(s)
     db.commit()
     return s
 
 
-@app.patch("/api/sources/{source_id}", response_model=SourceOut, dependencies=[Depends(require_key_if_configured)])
-def patch_source(source_id: int, body: SourcePatch, db: Session = Depends(get_db)):
+def _get_source(db: Session, source_id: int) -> Source:
     s = db.get(Source, source_id)
     if not s:
         raise HTTPException(404, "Source not found")
+    return s
+
+
+@app.patch("/api/sources/{source_id}", response_model=SourceOut, dependencies=[Depends(require_key_if_configured)])
+def patch_source(source_id: int, body: SourcePatch, db: Session = Depends(get_db)):
+    s = _get_source(db, source_id)
     s.enabled = body.enabled
     db.commit()
     return s
 
 
+@app.delete("/api/sources/{source_id}", status_code=204, dependencies=[Depends(require_key_if_configured)])
+def delete_source(source_id: int, db: Session = Depends(get_db)):
+    db.delete(_get_source(db, source_id))
+    db.commit()
+
+
+# ---------------------------------------------------------------- settings (edited from the website)
+@app.get("/api/settings", response_model=list[SettingOut], dependencies=[Depends(require_api_key)])
+def get_app_settings(db: Session = Depends(get_db)):
+    return runtime.describe(db)
+
+
+@app.put("/api/settings", response_model=list[SettingOut], dependencies=[Depends(require_api_key)])
+def put_app_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
+    unknown = set(body.values) - set(runtime.EDITABLE)
+    if unknown:
+        raise HTTPException(422, f"Unknown setting(s): {', '.join(sorted(unknown))}")
+    api_id = body.values.get("telegram_api_id", "").strip()
+    if api_id and not api_id.isdigit():
+        raise HTTPException(422, "Telegram API ID must be a number")
+    runtime.update(db, body.values)
+    return runtime.describe(db)
+
+
+# ---------------------------------------------------------------- Telegram login + chat picker
+def _tg_creds():
+    s = runtime.effective_settings()
+    if not (s.telegram_api_id and s.telegram_api_hash):
+        raise HTTPException(422, "Save your Telegram API ID and API hash first (from my.telegram.org).")
+    return s
+
+
+@app.get("/api/telegram/status", dependencies=[Depends(require_api_key)])
+def telegram_status():
+    s = runtime.effective_settings()
+    return {
+        "has_credentials": bool(s.telegram_api_id and s.telegram_api_hash),
+        "connected": bool(s.telegram_session_string),
+    }
+
+
+@app.post("/api/telegram/send-code", dependencies=[Depends(require_api_key)])
+def telegram_send_code(body: PhoneBody):
+    s = _tg_creds()
+    try:
+        telegram_login.send_code(body.phone.strip(), s.telegram_api_id, s.telegram_api_hash)
+    except telegram_login.LoginError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/telegram/sign-in", dependencies=[Depends(require_api_key)])
+def telegram_sign_in(body: SignInBody, db: Session = Depends(get_db)):
+    try:
+        result = telegram_login.sign_in(body.code.strip(), body.password)
+    except telegram_login.LoginError as e:
+        raise HTTPException(400, str(e))
+    if result.get("needs_password"):
+        return {"connected": False, "needs_password": True}
+    runtime.update(db, {"telegram_session_string": result["session"]})
+    return {"connected": True, "needs_password": False}
+
+
+@app.get("/api/telegram/chats", response_model=list[TelegramChat], dependencies=[Depends(require_api_key)])
+def telegram_chats():
+    s = _tg_creds()
+    if not s.telegram_session_string:
+        raise HTTPException(422, "Log in to Telegram first (Settings).")
+    try:
+        return telegram_login.list_chats(s.telegram_api_id, s.telegram_api_hash, s.telegram_session_string)
+    except telegram_login.LoginError as e:
+        raise HTTPException(400, str(e))
+
+
+# ---------------------------------------------------------------- manual trigger
 @app.post("/api/scrape/now", dependencies=[Depends(require_api_key)])
 def scrape_now():
     from .scheduler import run_cycle
@@ -160,49 +306,3 @@ def scrape_now():
     if stats is None:
         raise HTTPException(409, "A collection cycle is already running")
     return stats
-
-
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
-
-
-def get_llm() -> LLM:
-    if not get_settings().anthropic_api_key:
-        raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
-    return AnthropicLLM()
-
-
-def _decode(data: bytes) -> str:
-    for enc in ("utf-8-sig", "utf-16"):
-        try:
-            return data.decode(enc)
-        except UnicodeError:
-            continue
-    return data.decode("latin-1")
-
-
-@app.post("/api/upload/whatsapp", response_model=UploadResult, dependencies=[Depends(require_key_if_configured)])
-def upload_whatsapp(
-    file: UploadFile = File(...),
-    group_name: str | None = Form(None),
-    db: Session = Depends(get_db),
-    llm: LLM = Depends(get_llm),
-):
-    data = file.file.read(MAX_UPLOAD_BYTES + 1)
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "File too large (max 20 MB)")
-    if not (file.filename or "").lower().endswith(".txt"):
-        raise HTTPException(422, "Upload the exported chat as a .txt file")
-    messages = parse_chat(_decode(data))
-    if not messages:
-        raise HTTPException(422, "No messages found. Expected lines like 'DD/MM/YY, HH:MM - Sender: message'")
-    group = (group_name or "").strip() or group_name_from_filename(file.filename)
-
-    new_rows = save_raw_items(db, "whatsapp", group, to_raw_items(group, messages))
-    if not db.scalar(select(Source).where(Source.type == "whatsapp", Source.identifier == group)):
-        db.add(Source(type="whatsapp", identifier=group))
-        db.commit()
-    ids = [r.id for r in new_rows]
-    found = 0
-    for i in range(0, len(ids), 500):
-        found += process_unprocessed(db, llm, only_ids=ids[i : i + 500])
-    return UploadResult(source_name=group, parsed_messages=len(messages), new_items=len(new_rows), openings_found=found)

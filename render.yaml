@@ -1,7 +1,8 @@
 # Render Blueprint: https://render.com/docs/blueprint-spec
-# NOTE: this uses the FREE plan. Free web services sleep after ~15 min idle (pausing the 5-minute
-# polling) and the SQLite file is wiped on every restart/deploy. For always-on polling with
-# persistent data use a paid plan + disk (or Postgres), which is a deliberate cost decision.
+# All API keys and the Telegram login are entered on the website's Settings page and stored in the
+# database, so DATABASE_URL must point at a PERSISTENT database (e.g. a free Neon/Supabase Postgres URL,
+# or Render Postgres). With the default SQLite file on Render's free plan, everything is wiped on restart.
+# Free web services also sleep after ~15 min idle, which pauses the 5-minute polling.
 services:
   - type: web
     name: openingshub-api
@@ -13,15 +14,7 @@ services:
     envVars:
       - key: FRONTEND_ORIGIN
         value: https://jatin-29.github.io
-      - key: DATABASE_URL
-        value: sqlite:////tmp/openingshub.db
-      - key: API_KEY
+      - key: API_KEY            # your admin key: generated here; copy it into the website's Settings page
         generateValue: true
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: TELEGRAM_API_ID
-        sync: false
-      - key: TELEGRAM_API_HASH
-        sync: false
-      - key: TELEGRAM_SESSION_STRING
+      - key: DATABASE_URL       # paste a Postgres connection string
         sync: false

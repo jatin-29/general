@@ -5,6 +5,10 @@ from sqlalchemy.pool import StaticPool
 from .config import get_settings
 
 _url = get_settings().database_url
+if _url.startswith("postgres://"):  # Render/Heroku style
+    _url = "postgresql+psycopg://" + _url.removeprefix("postgres://")
+elif _url.startswith("postgresql://"):
+    _url = "postgresql+psycopg://" + _url.removeprefix("postgresql://")
 _kwargs: dict = {}
 if _url.startswith("sqlite"):
     _kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}

@@ -11,6 +11,7 @@ Only the chats added as Sources are read.
 import asyncio
 import logging
 from ..config import get_settings
+from ..runtime import effective_settings
 from ..models import Source
 from .base import Collector, RawItemData, register
 
@@ -42,7 +43,7 @@ def _client():
     from telethon import TelegramClient
     from telethon.sessions import StringSession
 
-    s = get_settings()
+    s = effective_settings()
     if not (s.telegram_api_id and s.telegram_api_hash and s.telegram_session_string):
         raise RuntimeError("Telegram is not configured (TELEGRAM_API_ID/HASH/SESSION_STRING)")
     return TelegramClient(StringSession(s.telegram_session_string), s.telegram_api_id, s.telegram_api_hash)
@@ -103,7 +104,7 @@ async def run_listener() -> None:
 
     init_db()
     with SessionLocal() as db:
-        idents = [s.identifier for s in db.scalars(select(Source).where(Source.type == "telegram", Source.enabled.is_(True)))]
+        idents = {s.identifier: s.label for s in db.scalars(select(Source).where(Source.type == "telegram", Source.enabled.is_(True)))}
     if not idents:
         raise SystemExit("No enabled telegram Sources; add some via POST /api/sources")
 
@@ -111,10 +112,10 @@ async def run_listener() -> None:
         if not await client.is_user_authorized():
             raise SystemExit("Telegram session is not authorized")
         by_peer: dict[int, tuple[str, str | None, int]] = {}
-        for ident in idents:
+        for ident, label in idents.items():
             try:
                 ent = await _resolve(client, clean_identifier(ident))
-                by_peer[utils.get_peer_id(ent)] = (ident, getattr(ent, "username", None), ent.id)
+                by_peer[utils.get_peer_id(ent)] = (label, getattr(ent, "username", None), ent.id)
             except Exception:
                 log.exception("cannot resolve %s; skipping", ident)
 

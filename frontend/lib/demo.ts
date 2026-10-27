@@ -81,7 +81,7 @@ export function demoSetApplied(id: number, applied: boolean): Opening {
 }
 
 export const demoSources = (): Source[] => [
-  { id: 1, type: "telegram", identifier: "offcampus_jobs", enabled: true, last_checked_at: null },
-  { id: 2, type: "telegram", identifier: "dev_openings", enabled: true, last_checked_at: null },
-  { id: 3, type: "youtube", identifier: "UC_sample_channel_id", enabled: false, last_checked_at: null },
+  { id: 1, type: "telegram", identifier: "offcampus_jobs", name: "Off Campus Jobs", enabled: true, last_checked_at: null },
+  { id: 2, type: "telegram", identifier: "dev_openings", name: "Dev Openings", enabled: true, last_checked_at: null },
+  { id: 3, type: "youtube", identifier: "UC_sample_channel_id", name: "Placement Guide", enabled: false, last_checked_at: null },
 ];

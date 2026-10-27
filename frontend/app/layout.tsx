@@ -29,8 +29,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Dashboard
                 </Link>
+                <Link href="/add" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  Add
+                </Link>
                 <Link href="/sources" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Sources
+                </Link>
+                <Link href="/settings" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  Settings
                 </Link>
                 <ThemeToggle />
               </nav>

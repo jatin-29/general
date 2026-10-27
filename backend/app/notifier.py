@@ -2,7 +2,7 @@ import logging
 
 import httpx
 
-from .config import get_settings
+from .runtime import effective_settings
 from .models import Opening
 from .utils import retry
 
@@ -20,7 +20,7 @@ def _send(token: str, chat_id: str, text: str) -> None:
 
 
 def notify_opening(o: Opening) -> None:
-    s = get_settings()
+    s = effective_settings()
     if not (s.telegram_bot_token and s.telegram_notify_chat_id):
         return
     lines = [f"New opening: {o.role} @ {o.company}"]

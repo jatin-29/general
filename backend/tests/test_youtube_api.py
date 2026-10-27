@@ -49,7 +49,7 @@ def test_run_collection_uses_registered_collector(db, llm, monkeypatch):
 def test_api(db, llm):
     save_raw_items(db, "youtube", "UC1", parse_feed(FEED))
     process_unprocessed(db, llm)
-    c = TestClient(app)
+    c = TestClient(app, headers={"X-API-Key": "test-key"})
     r = c.get("/api/openings", params={"search": "sde", "source": "youtube"}).json()
     assert r["total"] == 1
     oid = r["items"][0]["id"]
@@ -61,8 +61,7 @@ def test_api(db, llm):
     assert c.get("/api/openings/999").status_code == 404
     # sources
     body = {"type": "telegram", "identifier": "@jobs"}
-    assert c.post("/api/sources", json=body).status_code == 401  # API_KEY configured => key required
-    c.headers["X-API-Key"] = "test-key"
+    assert TestClient(app).post("/api/sources", json=body).status_code == 401  # API_KEY configured => key required
     s = c.post("/api/sources", json=body)
     assert s.status_code == 201 and s.json()["identifier"] == "jobs"
     assert c.post("/api/sources", json={"type": "telegram", "identifier": "jobs"}).status_code == 409

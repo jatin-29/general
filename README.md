@@ -1,82 +1,45 @@
 # OpeningsHub
 
-Aggregates off-campus job/internship openings from **Telegram** channels/groups, **WhatsApp** groups (exported chats) and **YouTube** channels, extracts structured data with Claude, and shows it in a filterable dashboard.
+Collects off-campus job/internship openings from **Telegram** groups/channels and **YouTube** channels, extracts structured data with Claude, and shows them in a filterable dashboard. Anything else (e.g. a WhatsApp post) you add by hand on the **Add** page, with optional AI auto-fill.
 
 ```
 Telegram (Telethon) ─┐
-YouTube (RSS)        ├─> RawItem ─> Claude extractor ─> dedupe ─> Opening ─> FastAPI ─> Next.js dashboard
-WhatsApp (.txt)      ─┘                                                  └─> optional Telegram bot push
+YouTube (RSS / API)  ├─> RawItem ─> Claude extractor ─> dedupe ─> Opening ─> FastAPI ─> Next.js dashboard
+Add page (manual)    ─┘                                                  └─> optional Telegram bot push
 ```
 
-* **Backend** – FastAPI, SQLAlchemy, SQLite, APScheduler (collectors run in-process every 5 min).
-* **Frontend** – Next.js (App Router), TypeScript, Tailwind.
-* Only the channels/groups you add as **Sources** are read. Nothing else on your accounts is touched.
+* **Backend:** FastAPI, SQLAlchemy (SQLite or Postgres), APScheduler (polls every 5 min inside the process).
+* **Frontend:** Next.js static export, TypeScript, Tailwind. Hosted on GitHub Pages.
+* **Everything is configured on the website:** API keys and Telegram login (**Settings**), which groups/channels to read (**Sources**), manual openings (**Add**). The only server-side setting is the admin key.
 
-## Quick start
+## Using the website
 
-Prerequisites: Python 3.11+, Node 18.18+.
+1. **Settings → Admin key:** paste the backend's `API_KEY` (kept only in your browser).
+2. **Settings → AI extraction:** paste your Anthropic API key (console.anthropic.com; pay-per-use, `claude-haiku-4-5` by default, 10 posts batched per request).
+3. **Settings → Telegram:** paste the API ID/hash from https://my.telegram.org → *API development tools*, then log in with your phone number, the code Telegram sends, and your 2-step password if you have one. The session is stored in your backend's database, so anyone with the admin key and database access can act as your Telegram account.
+4. **Sources → Telegram:** *Pick from my Telegram chats* lists the groups/channels you've joined; tick the ones that post jobs. Public channels can also be added by `@username`. Only the sources listed are ever read.
+5. **Sources → YouTube:** paste a channel URL, `@handle` or channel id.
+6. **Add:** type in an opening, or paste a post and press *Auto-fill*.
 
-### 1. Get credentials
+On first poll a Telegram source backfills its latest 50 messages; afterwards only new messages are fetched. *Fetch now* on the Sources page runs a cycle immediately.
 
-| What | Where | Needed for |
-|---|---|---|
-| Anthropic API key | https://console.anthropic.com → API keys | extraction (required). Paid per use; the default `claude-haiku-4-5` is the cheap tier and items are batched 10 per request |
-| Telegram `api_id` / `api_hash` | https://my.telegram.org → *API development tools* → create an app | Telegram collector |
-| Telegram session string | `python scripts/create_telegram_session.py` (below) | Telegram collector |
-| Bot token + chat id *(optional)* | `@BotFather` → `/newbot`; message your bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` for your chat id | push notifications |
-| YouTube Data API key *(optional)* | Google Cloud console → YouTube Data API v3 | full video descriptions (RSS only has the first part). Free quota |
+**YouTube note:** YouTube's RSS feed sometimes returns 404 to server/datacenter IPs (it did in the environment this was built in). If a channel fails, add a free YouTube Data API key in Settings and the collector uses the API instead.
 
-YouTube-only or WhatsApp-only use needs just the Anthropic key.
-
-### 2. Backend
+## Run locally
 
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # fill in the values
-python scripts/create_telegram_session.py     # prints TELEGRAM_SESSION_STRING; paste into .env
+cp .env.example .env        # set API_KEY to any secret; everything else is optional
 uvicorn app.main:app --reload --port 8000
+
+cd ../frontend
+cp .env.example .env.local  # NEXT_PUBLIC_API_URL=http://localhost:8000
+npm install && npm run dev  # http://localhost:3000, then open Settings
 ```
 
-API docs: http://localhost:8000/docs · health: `GET /api/health`.
-
-> The session string grants full access to your Telegram account. Keep it in `.env` / a secret store, never in git.
-
-### 3. Frontend
-
-```bash
-cd frontend
-cp .env.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:8000
-npm install
-npm run dev                  # http://localhost:3000
-```
-
-## Choosing which groups/channels to read
-
-Add one **Source** per channel on the site's **Sources** page (enter your backend's `API_KEY` there once; it's stored only in your browser), or via the API:
-
-```bash
-# public Telegram channel/group  (@username or t.me link)
-curl -X POST localhost:8000/api/sources -H 'content-type: application/json' \
-     -d '{"type":"telegram","identifier":"@some_jobs_channel"}'
-
-# private Telegram group/channel you have joined: use its numeric id
-python scripts/create_telegram_session.py --list-chats      # lists ids of your joined chats
-curl -X POST localhost:8000/api/sources -H 'content-type: application/json' \
-     -d '{"type":"telegram","identifier":"-1001234567890"}'
-
-# YouTube channel: the channel id (starts with UC…, from the channel's About → Share → Copy channel ID)
-curl -X POST localhost:8000/api/sources -H 'content-type: application/json' \
-     -d '{"type":"youtube","identifier":"UCxxxxxxxxxxxxxxxxxxxxxx"}'
-
-# pause a source
-curl -X PATCH localhost:8000/api/sources/3 -H 'content-type: application/json' -d '{"enabled":false}'
-```
-
-On the first poll a Telegram source backfills the latest 50 messages; afterwards only messages newer than the last stored one are fetched.
-
-**WhatsApp** has no safe official API for reading groups, so it works from exports: in the group, ⋮ → *More* → *Export chat* → **Without media**, then upload the `.txt` on the `/upload` page. The group name (from the file name, or the optional field) becomes the source, and re-uploading a newer export only processes new messages. Parsed formats: Android (`DD/MM/YY, HH:MM - Sender: msg`, 12h and 24h) and iOS (`[DD/MM/YY, HH:MM:SS] Sender: msg`). Messages under 25 characters without a link are skipped before the LLM to save cost.
+Keys can still be supplied as environment variables (see `backend/.env.example`); values saved on the Settings page take priority.
 
 ## How it works
 
@@ -102,7 +65,7 @@ It uses the same pipeline and DB. Set `TELEGRAM_POLL_ENABLED=false` for the web 
 
 ### Adding a new source type
 
-Write one file in `backend/app/collectors/`: subclass `Collector`, set `source_type`, implement `collect(source, last_external_id) -> list[RawItemData]`, decorate with `@register`, and import it in `collectors/__init__.py`. Set `polled = False` for push-style sources like WhatsApp.
+Write one file in `backend/app/collectors/`: subclass `Collector`, set `source_type`, implement `collect(source, last_external_id) -> list[RawItemData]`, decorate with `@register`, and import it in `collectors/__init__.py`. Set `polled = False` for push-style sources.
 
 ## Tests
 
@@ -110,7 +73,7 @@ Write one file in `backend/app/collectors/`: subclass `Collector`, set `source_t
 cd backend && pytest
 ```
 
-Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked), the pipeline, expiry, the scheduler and the API. No network or API keys needed. The Telegram network code is only unit-tested for its pure helpers; it needs a real session to exercise.
+Covers dedupe, extractor JSON validation/retry (LLM mocked), the pipeline, expiry, the scheduler and the API. No network or API keys needed. The Telegram network code is only unit-tested for its pure helpers; it needs a real session to exercise.
 
 ## Deployment notes
 
@@ -122,8 +85,10 @@ Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked)
 * **Frontend (Vercel/Netlify):** set the project root to `frontend/`, and `NEXT_PUBLIC_API_URL` to your backend's public URL.
 * **Backend:** needs a long-running process (Render, Railway, Fly.io, a VPS), not serverless, because the scheduler runs inside it. Run a **single instance** (multiple would duplicate polling). Set `FRONTEND_ORIGIN` to your frontend URL (comma-separate several) for CORS, and set `API_KEY`.
 * **Database:** SQLite needs a persistent volume. For Postgres: `pip install "psycopg[binary]"` and `DATABASE_URL=postgresql+psycopg://user:pass@host/db` (not tested in this repo; tables are created on start-up, there are no migrations yet).
-* **Security:** `/api/upload/whatsapp`, `/api/sources` and the PATCH endpoints are unauthenticated (the dashboard is meant for personal use) and an upload spends Anthropic credits. If you expose the backend publicly, put it behind auth (a reverse proxy with basic auth, Cloudflare Access, etc.).
+* **Security:** reading openings is public. Everything that changes data, reveals/sets secrets, or spends money requires the `X-API-Key` header (the admin key), and the secrets endpoints are disabled until `API_KEY` is set. Use a long random `API_KEY`, and keep the site's browser profile private since the key is stored there.
 
 ## Hosting the backend (Render)
 
-`render.yaml` + `backend/Dockerfile` deploy the API as a Render Blueprint: *New → Blueprint →* pick this repo, then fill the `sync: false` env vars (`ANTHROPIC_API_KEY`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_SESSION_STRING`). `API_KEY` is generated; copy it from the service's Environment tab. It's configured for Render's **free** plan, which sleeps when idle (pausing polling) and loses the SQLite file on restart; use a paid plan with a disk or Postgres for always-on use. Then set the `API_URL` Actions variable to the service URL and re-run the Pages workflow.
+`render.yaml` + `backend/Dockerfile` deploy the API as a Render Blueprint: *New → Blueprint →* pick this repo. It generates `API_KEY` (copy it from the service's Environment tab into the website's Settings) and asks for `DATABASE_URL`.
+
+Because your keys and Telegram login live in the database, `DATABASE_URL` must be a **persistent** Postgres URL (Neon's and Supabase's free tiers work; so does Render Postgres). On Render's free plan the service also sleeps after ~15 minutes idle, which pauses polling; a paid instance (or an uptime pinger hitting `/api/health`) keeps it awake. Then set the `API_URL` Actions variable to the service URL and re-run the Pages workflow. Postgres support is included but wasn't tested against a live Postgres here.

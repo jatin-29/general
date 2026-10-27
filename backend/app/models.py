@@ -17,10 +17,16 @@ class Source(Base):
     __table_args__ = (UniqueConstraint("type", "identifier"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    type: Mapped[str] = mapped_column(String(20))  # telegram|youtube|whatsapp
+    type: Mapped[str] = mapped_column(String(20))  # telegram|youtube
     identifier: Mapped[str] = mapped_column(String(255))  # @channel / channel_id / group name
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # display title
+
+    @property
+    def label(self) -> str:
+        """Name stored on RawItems/Openings (readable even when identifier is a numeric chat id)."""
+        return self.name or self.identifier
 
 
 class RawItem(Base):
@@ -28,7 +34,7 @@ class RawItem(Base):
     __table_args__ = (UniqueConstraint("source_type", "source_name", "external_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    source_type: Mapped[str] = mapped_column(String(20), index=True)
+    source_type: Mapped[str] = mapped_column(String(20), index=True)  # telegram|youtube|manual
     source_name: Mapped[str] = mapped_column(String(255))
     external_id: Mapped[str] = mapped_column(String(255))
     text: Mapped[str] = mapped_column(Text)
@@ -58,3 +64,12 @@ class Opening(Base):
     dedupe_key: Mapped[str] = mapped_column(String(2200), unique=True, index=True)
 
     raw_item: Mapped[RawItem] = relationship()
+
+
+class AppSetting(Base):
+    """Settings edited from the website; they override environment variables."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")

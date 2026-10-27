@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .collectors import REGISTRY
 from .collectors.base import RawItemData
 from .dedupe import find_duplicate, make_dedupe_key
-from .config import get_settings
+from .runtime import effective_settings
 from .extractor import LLM, AnthropicLLM, extract_batch
 from .models import Opening, RawItem, Source, utcnow
 from .notifier import notify_opening
@@ -96,12 +96,12 @@ def collect_source(db: Session, source: Source) -> int:
         return 0
     last = db.scalar(
         select(RawItem.external_id)
-        .where(RawItem.source_type == source.type, RawItem.source_name == source.identifier)
+        .where(RawItem.source_type == source.type, RawItem.source_name == source.label)
         .order_by(func.length(RawItem.external_id).desc(), RawItem.external_id.desc())
         .limit(1)
     )
     items = cls().collect(source, last)
-    new = save_raw_items(db, source.type, source.identifier, items)
+    new = save_raw_items(db, source.type, source.label, items)
     source.last_checked_at = utcnow()
     db.commit()
     return len(new)
@@ -117,7 +117,7 @@ def run_collection(db: Session, llm: LLM | None = None) -> dict:
             db.rollback()
             stats["errors"] += 1
             log.exception("collector failed for %s:%s", source.type, source.identifier)
-    if llm is None and not get_settings().anthropic_api_key:
+    if llm is None and not effective_settings().anthropic_api_key:
         log.warning("ANTHROPIC_API_KEY not set; items stored but extraction skipped")
         expire_openings(db)
         return stats
