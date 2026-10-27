@@ -1,0 +1,32 @@
+# Edit this file to choose what to watch. Commit the change and the next run uses it.
+
+# Telegram groups/channels you have joined (or public ones). Use @username, a t.me link,
+# or the numeric id for private groups (run `python alerts/setup.py` to list your chats with ids).
+telegram_chats = [
+  # "@some_jobs_channel",
+  # "-1001234567890",
+]
+
+# YouTube channels: channel URL, @handle, or channel id (UC...).
+youtube_channels = [
+  # "@SomeJobsChannel",
+]
+
+# A post is sent only if it contains at least one `include` word (whole words, case-insensitive;
+# end a word with * to match any ending, e.g. "recruit*") and none of the `exclude` words.
+include = [
+  "hiring", "intern", "interns", "internship", "internships", "freshers", "fresher",
+  "opening", "openings", "vacancy", "vacancies", "off campus", "off-campus",
+  "walk-in", "walkin", "job", "jobs", "recruit*",
+]
+exclude = [
+  "course", "courses", "bootcamp", "certification", "webinar", "placement guarantee",
+  "pay after placement", "registration fee",
+]
+
+# On the very first run, how many of the latest posts per source to send (so you can see it works).
+# Everything older is skipped; only new posts are sent afterwards.
+first_run_backfill = 3
+
+# Longest alert (characters of the original post) before it is cut off.
+max_chars = 700
