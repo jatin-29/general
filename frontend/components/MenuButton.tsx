@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { JOBS_MODE } from "@/lib/mode";
 import ThemeToggle from "./ThemeToggle";
@@ -11,6 +12,7 @@ const fire = (name: string) => window.dispatchEvent(new Event(name));
 export default function MenuButton() {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const onJobs = usePathname() === "/"; // "Add a job" and "Lock" act on the jobs page
 
   useEffect(() => {
     if (!open) return;
@@ -49,13 +51,16 @@ export default function MenuButton() {
               <Link href="/settings" className={item} onClick={() => setOpen(false)}>Settings</Link>
             </>
           )}
-          {JOBS_MODE && <button className={item} onClick={act("openings:add")}>＋ Add a job</button>}
+          {JOBS_MODE && <Link href="/" className={item} onClick={() => setOpen(false)}>🏠 Jobs</Link>}
+          {JOBS_MODE && <Link href="/profile" className={item} onClick={() => setOpen(false)}>👤 My profile</Link>}
+          {JOBS_MODE && <Link href="/resume" className={item} onClick={() => setOpen(false)}>📄 Resume builder</Link>}
+          {JOBS_MODE && onJobs && <button className={item} onClick={act("openings:add")}>＋ Add a job</button>}
           <button className={item} onClick={act("openings:spotify")}>♫ Spotify</button>
           <div className="flex items-center justify-between rounded-xl px-3 py-1.5 text-sm font-semibold">
             Dark mode <ThemeToggle />
           </div>
-          {JOBS_MODE && <button className={item} onClick={act("openings:key")}>🔑 GitHub key (for delete)</button>}
-          {JOBS_MODE && <button className={`${item} text-rose-600`} onClick={act("openings:lock")}>🔒 Lock</button>}
+          {JOBS_MODE && onJobs && <button className={item} onClick={act("openings:key")}>🔑 GitHub key (for delete)</button>}
+          {JOBS_MODE && onJobs && <button className={`${item} text-rose-600`} onClick={act("openings:lock")}>🔒 Lock</button>}
         </nav>
       )}
     </div>

@@ -7,6 +7,8 @@ import AddJobDialog from "./AddJobDialog";
 import CountUp from "./CountUp";
 import HeroVisual from "./HeroVisual";
 import TokenDialog from "./TokenDialog";
+import ApplyKit from "./ApplyKit";
+import { DONE_APPLYING, STATUSES, followUpBadge, loadTracker, saveTracker, withStatus, type Status, type Track, type Tracker } from "@/lib/tracker";
 import { useToast } from "./Toast";
 import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
@@ -56,7 +58,9 @@ function Linkified({ text }: { text: string }) {
   );
 }
 
-function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void; onDelete?: () => void; index?: number }) {
+function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
+  job: Job; isNew: boolean; track?: Track; onStatus: (s: Status) => void; onKit: () => void; onDelete?: () => void; index?: number;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLElement>(null);
   const parsed = parseJobCached(job.text);
@@ -70,6 +74,8 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
   const long = body.length > 220 || body.split("\n").length > 4;
   const initial = (company ?? title).replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase() || "•";
   const hue = [...(company ?? title)].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR.length;
+  const fu = followUpBadge(track);
+  const st = STATUSES.find((x) => x.value === (track?.status ?? "")) ?? STATUSES[0];
 
   // fade/slide in when scrolled into view
   useEffect(() => {
@@ -85,7 +91,7 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
   }, []);
 
   return (
-    <article ref={ref} style={{ transitionDelay: `${(index % 2) * 70}ms` }} className={`card lift reveal flex flex-col gap-3 p-5 ${applied || expired ? "opacity-65" : ""}`}>
+    <article ref={ref} style={{ transitionDelay: `${(index % 2) * 70}ms` }} className={`card lift reveal flex flex-col gap-3 p-5 ${expired || track?.status === "rejected" ? "opacity-65" : ""}`}>
       <div className="flex gap-3.5">
         <div className="font-display grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl font-black text-white shadow-md" style={{ background: AVATAR[hue] }} aria-hidden="true">{initial}</div>
         <div className="min-w-0 flex-1">
@@ -93,6 +99,7 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
             <span className="rounded-full bg-sky-100 px-2.5 py-0.5 font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
             {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
             {badge && <span className={`rounded-full px-2.5 py-0.5 font-bold ${TONE[badge.tone]} ${badge.tone === "urgent" ? "pulse-ring" : ""}`}>{badge.label}</span>}
+            {fu && <span className={`rounded-full px-2.5 py-0.5 font-bold ${fu.urgent ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>⏰ {fu.label}</span>}
             <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
           </div>
           <h3 className="font-display text-lg font-black leading-snug">{title}</h3>
@@ -118,19 +125,22 @@ function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: 
           <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-primary">Open post ↗</a>
         ) : null}
         {job.apply_link && job.post_url && <a href={job.post_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Original post</a>}
-        {onDelete && (
-          <button type="button" className="btn-ghost ml-auto !px-3 text-rose-600" aria-label="Delete this job" title="Delete" onClick={() => confirm(job.manual ? "Delete this job?" : "Delete this job permanently? It will be removed from your site on every device.") && onDelete()}>🗑</button>
-        )}
-        <label className={`${onDelete ? "" : "ml-auto "}flex cursor-pointer select-none items-center gap-1.5 text-sm font-semibold`}>
-          <input type="checkbox" checked={applied} onChange={onToggle} className="h-4 w-4 rounded" />
-          Applied
-        </label>
+        <button type="button" className="btn-ghost" onClick={onKit} title="Email HR, ask for a referral, follow up, track">✉️ Apply kit</button>
+        <div className="ml-auto flex items-center gap-2">
+          <select aria-label="Application status" value={track?.status ?? ""} onChange={(e) => onStatus(e.target.value as Status)}
+            className={`cursor-pointer rounded-full border-0 py-1.5 pl-3 pr-7 text-xs font-bold outline-none ring-indigo-500/40 focus:ring-4 ${st.tone}`}>
+            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          {onDelete && (
+            <button type="button" className="btn-ghost !px-3 text-rose-600" aria-label="Delete this job" title="Delete" onClick={() => confirm(job.manual ? "Delete this job?" : "Delete this job permanently? It will be removed from your site on every device.") && onDelete()}>🗑</button>
+          )}
+        </div>
       </div>
     </article>
   );
 }
 
-type Quick = "all" | "new" | "soon";
+type Quick = "all" | "new" | "soon" | "mine";
 
 function Tile({ label, n, bg, shadow, active, onClick, delay, glyph }: { label: string; n: number; bg: string; shadow: string; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
   return (
@@ -146,6 +156,7 @@ function Tile({ label, n, bg, shadow, active, onClick, delay, glyph }: { label: 
 
 const Star = <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 9.3l-5 4.4 1.6 6.8L12 17l-5.6 3.5L8 13.7 3 9.3l6.6-.7z" /></svg>;
 const Clock = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+const Check = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 const Grid = <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
 
 export default function JobsFeed() {
@@ -156,7 +167,8 @@ export default function JobsFeed() {
   const [source, setSource] = useState("");
   const [quick, setQuick] = useState<Quick>("all");
   const [hideApplied, setHideApplied] = useState(false);
-  const [applied, setApplied] = useState<Set<string>>(new Set());
+  const [tracker, setTrackerState] = useState<Tracker>({});
+  const [kitJob, setKitJob] = useState<Job | null>(null);
   const [lastVisit, setLastVisit] = useState<number>(0);
   const [shown, setShown] = useState(PAGE);
   const [password, setPassword] = useState("");
@@ -192,7 +204,7 @@ export default function JobsFeed() {
 
   useEffect(() => {
     if (!ready) return;
-    setApplied(new Set(load<string[]>("jobs_applied", [])));
+    setTrackerState(loadTracker());
     setManual(load<Job[]>("jobs_manual", []));
     setPendingState(getPending());
     setLastVisit(load<number>("jobs_last_visit", 0));
@@ -228,13 +240,14 @@ export default function JobsFeed() {
     };
   }, []);
 
-  const toggle = (id: string) =>
-    setApplied((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      save("jobs_applied", [...next]);
+  const setTrack = (id: string, t: Track) =>
+    setTrackerState((prev) => {
+      const next = { ...prev, [id]: t };
+      if (!t.status && !t.note && !t.followUp) delete next[id];
+      saveTracker(next);
       return next;
     });
+  const statusOf = (id: string): Status => tracker[id]?.status ?? "";
 
   const addManual = (job: Job) => {
     const next = [job, ...manual];
@@ -299,19 +312,23 @@ export default function JobsFeed() {
     return d >= 0 && d <= 7;
   };
 
-  const counts = useMemo(() => ({ total: all.length, fresh: all.filter(isNewJob).length, soon: all.filter(isSoon).length }), [all, isNewJob]);
+  const counts = useMemo(
+    () => ({ total: all.length, fresh: all.filter(isNewJob).length, soon: all.filter(isSoon).length, mine: all.filter((j) => statusOf(j.id)).length }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [all, isNewJob, tracker],
+  );
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter(
       (j) =>
         (!source || j.source === source) &&
-        (quick === "all" || (quick === "new" ? isNewJob(j) : isSoon(j))) &&
-        (!hideApplied || !applied.has(j.id)) &&
+        (quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : !!statusOf(j.id))) &&
+        (!hideApplied || !DONE_APPLYING.includes(statusOf(j.id))) &&
         (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all, search, source, quick, hideApplied, applied, isNewJob]);
+  }, [all, search, source, quick, hideApplied, tracker, isNewJob]);
 
   useEffect(() => setShown(PAGE), [search, source, quick, hideApplied]);
 
@@ -356,6 +373,7 @@ export default function JobsFeed() {
           <div className="mt-10 flex flex-wrap items-start gap-3 sm:gap-4">
             <Tile label="New" n={counts.fresh} bg="linear-gradient(160deg,#ff9ec4,#ff6fa5)" shadow="rgb(255 80 150 / .6)" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
             <Tile label="Closing soon" n={counts.soon} bg="linear-gradient(160deg,#8fd3ff,#4aa8ff)" shadow="rgb(60 150 255 / .6)" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
+            <Tile label="My applications" n={counts.mine} bg="linear-gradient(160deg,#7be0b4,#22b07d)" shadow="rgb(30 170 110 / .55)" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
             <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all"} onClick={() => setQuick("all")} delay={700} glyph={Grid} />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -399,13 +417,13 @@ export default function JobsFeed() {
           <div className="card p-12 text-center">
             <p className="font-display text-xl font-black">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
             <p className="mt-1 text-sm text-slate-500">
-              {all.length === 0 ? "New posts from your channels appear here every 30 minutes. You can also add one with the + button." : "Try clearing the search or the filter tiles."}
+              {all.length === 0 ? "New posts from your channels appear here every 15 minutes. You can also add one with the + button." : "Try clearing the search or the filter tiles."}
             </p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {visible.slice(0, shown).map((j, i) => (
-              <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
+              <JobCard key={j.id} index={i} job={j} track={tracker[j.id]} onStatus={(st) => setTrack(j.id, withStatus(tracker[j.id], st))} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
             ))}
             {visible.length > shown && (
               <button className="btn-pill justify-center self-start lg:col-span-2 lg:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
@@ -415,6 +433,16 @@ export default function JobsFeed() {
       </section>
 
       {adding && <AddJobDialog onClose={() => setAdding(false)} onSave={addManual} />}
+      {kitJob && (
+        <ApplyKit
+          job={kitJob}
+          company={kitJob.company ?? parseJobCached(kitJob.text).company}
+          role={kitJob.role ?? parseJobCached(kitJob.text).role}
+          track={tracker[kitJob.id]}
+          onTrack={(t) => setTrack(kitJob.id, t)}
+          onClose={() => setKitJob(null)}
+        />
+      )}
       {keyDialog && (
         <TokenDialog
           reason={keyDialog.reason}

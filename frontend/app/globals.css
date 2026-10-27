@@ -204,3 +204,13 @@ html { scroll-behavior: smooth; }
   *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- resume printing: only the resume sheet goes to the PDF ---------- */
+#print-root { display: none; }
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; overflow: visible !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block !important; }
+  #print-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
