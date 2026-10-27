@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, parseIso, timeAgo, type Job } from "@/lib/jobs";
-import { deadlineBadge, parseJob } from "@/lib/extract";
+import { daysLeft, deadlineBadge, parseJobCached } from "@/lib/extract";
+import CountUp from "./CountUp";
 import AddJobDialog from "./AddJobDialog";
 
 const TONE = {
@@ -47,9 +48,9 @@ function Linkified({ text }: { text: string }) {
   );
 }
 
-function JobCard({ job, isNew, applied, onToggle, onDelete }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void; onDelete?: () => void }) {
+function JobCard({ job, isNew, applied, onToggle, onDelete, index = 0 }: { job: Job; isNew: boolean; applied: boolean; onToggle: () => void; onDelete?: () => void; index?: number }) {
   const [open, setOpen] = useState(false);
-  const parsed = useMemo(() => parseJob(job.text), [job.text]);
+  const parsed = parseJobCached(job.text);
   const company = job.company ?? parsed.company;
   const role = job.role ?? parsed.role;
   const deadline = job.deadline ? parseIso(job.deadline) : parsed.deadline;
@@ -59,11 +60,11 @@ function JobCard({ job, isNew, applied, onToggle, onDelete }: { job: Job; isNew:
   const body = role ? job.text.trim() : jobBody(job.text); // when the role was found, keep the whole post visible
   const long = body.length > 220 || body.split("\n").length > 4;
   return (
-    <article className={`card flex flex-col gap-3 p-4 transition ${applied || expired ? "opacity-60" : ""}`}>
+    <article style={{ animationDelay: `${Math.min(index, 10) * 55}ms` }} className={`card lift animate-fade-up flex flex-col gap-3 p-4 ${applied || expired ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
         {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
-        {badge && <span className={`rounded-full px-2.5 py-0.5 font-medium ${TONE[badge.tone]}`}>{badge.label}</span>}
+        {badge && <span className={`rounded-full px-2.5 py-0.5 font-medium ${TONE[badge.tone]} ${badge.tone === "urgent" ? "pulse-ring" : ""}`}>{badge.label}</span>}
         <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
       </div>
       <div>
@@ -179,6 +180,19 @@ export default function JobsFeed() {
   };
 
   const all = useMemo(() => [...manual, ...(jobs ?? [])], [manual, jobs]);
+  const stats = useMemo(() => {
+    let closing = 0;
+    let fresh = 0;
+    for (const j of all) {
+      const dl = j.deadline ? parseIso(j.deadline) : parseJobCached(j.text).deadline;
+      if (dl) {
+        const d = daysLeft(dl);
+        if (d >= 0 && d <= 7) closing++;
+      }
+      if (lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit) fresh++;
+    }
+    return { total: all.length, fresh, closing, applied: all.filter((j) => applied.has(j.id)).length };
+  }, [all, applied, lastVisit]);
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -195,7 +209,7 @@ export default function JobsFeed() {
   if (locked !== "no") {
     return (
       <form
-        className="card mx-auto max-w-sm space-y-3 p-6"
+        className="card animate-pop-in mx-auto mt-10 max-w-sm space-y-3 p-6"
         onSubmit={(e) => {
           e.preventDefault();
           const pw = (new FormData(e.currentTarget).get("pw") as string) ?? "";
@@ -214,7 +228,25 @@ export default function JobsFeed() {
 
   return (
     <div className="space-y-4">
-      <div className="card grid gap-3 p-4 sm:grid-cols-[1fr_12rem_auto]">
+      {all.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(
+            [
+              ["Total jobs", stats.total, ""],
+              ["New since last visit", stats.fresh, "text-emerald-500"],
+              ["Closing this week", stats.closing, "text-amber-500"],
+              ["Applied", stats.applied, "gradient-text"],
+            ] as const
+          ).map(([label, n, tone], i) => (
+            <div key={label} style={{ animationDelay: `${i * 70}ms` }} className="card lift animate-fade-up p-3.5">
+              <div className={`text-2xl font-bold tabular-nums ${tone}`}><CountUp value={n} /></div>
+              <div className="text-xs text-slate-500">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="card animate-pop-in grid gap-3 p-4 sm:grid-cols-[1fr_12rem_auto]">
         <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">All sources</option>
@@ -251,7 +283,7 @@ export default function JobsFeed() {
           <button className="btn-ghost" onClick={() => refresh()}>Retry</button>
         </div>
       ) : !jobs ? (
-        <div className="space-y-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card h-36 animate-pulse bg-slate-100 dark:bg-slate-900" />)}</div>
+        <div className="space-y-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-36" />)}</div>
       ) : visible.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="font-medium">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
@@ -261,8 +293,8 @@ export default function JobsFeed() {
         </div>
       ) : (
         <div className="space-y-3">
-          {visible.slice(0, shown).map((j) => (
-            <JobCard key={j.id} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit} />
+          {visible.slice(0, shown).map((j, i) => (
+            <JobCard key={j.id} index={i} job={j} applied={applied.has(j.id)} onToggle={() => toggle(j.id)} onDelete={j.manual ? () => removeManual(j.id) : undefined} isNew={lastVisit > 0 && new Date(j.added_at).getTime() > lastVisit} />
           ))}
           {visible.length > shown && (
             <button className="btn-ghost w-full" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>

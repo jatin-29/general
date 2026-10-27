@@ -92,3 +92,12 @@ Covers dedupe, extractor JSON validation/retry (LLM mocked), the pipeline, expir
 `render.yaml` + `backend/Dockerfile` deploy the API as a Render Blueprint: *New → Blueprint →* pick this repo. It generates `API_KEY` (copy it from the service's Environment tab into the website's Settings) and asks for `DATABASE_URL`.
 
 Because your keys and Telegram login live in the database, `DATABASE_URL` must be a **persistent** Postgres URL (Neon's and Supabase's free tiers work; so does Render Postgres). On Render's free plan the service also sleeps after ~15 minutes idle, which pauses polling; a paid instance (or an uptime pinger hitting `/api/health`) keeps it awake. Then set the `API_URL` Actions variable to the service URL and re-run the Pages workflow. Postgres support is included but wasn't tested against a live Postgres here.
+
+## Spotify "now playing" (website)
+
+The floating Spotify button on the site shows what you are playing and tints the page with the album colours.
+Setup (once): create a free app at https://developer.spotify.com/dashboard (tick *Web API*), add the site address
+(shown in the panel, e.g. `https://<you>.github.io/<repo>/`) as a **Redirect URI**, paste the **Client ID** into the
+panel and press *Connect*. It uses Spotify's login with PKCE (no secret and no server). The Client ID and the tokens
+are kept in your browser only. Spotify may limit developer apps (for example to a few approved users), so check the
+dashboard if login is refused.

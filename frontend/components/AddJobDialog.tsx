@@ -36,8 +36,8 @@ export default function AddJobDialog({ onClose, onSave }: { onClose: () => void;
 
   const label = "block space-y-1 text-sm font-medium";
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form onSubmit={submit} className="card w-full max-w-md space-y-3 p-5" role="dialog" aria-modal="true" aria-label="Add a job">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form onSubmit={submit} className="card animate-pop-in w-full max-w-md space-y-3 p-5" role="dialog" aria-modal="true" aria-label="Add a job">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Add a job</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">✕</button>

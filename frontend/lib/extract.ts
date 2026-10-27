@@ -123,3 +123,14 @@ export function deadlineBadge(deadline: Date, now = new Date()): { label: string
   if (d === 1) return { label: `Closing tomorrow · ${when}`, tone: "urgent" };
   return { label: `Closing in ${d} days · ${when}`, tone: d <= 3 ? "urgent" : d <= 7 ? "soon" : "ok" };
 }
+
+const cache = new Map<string, Parsed>();
+/** Same as parseJob, remembered per text (the feed parses every card more than once). */
+export function parseJobCached(text: string): Parsed {
+  let p = cache.get(text);
+  if (!p) {
+    p = parseJob(text);
+    cache.set(text, p);
+  }
+  return p;
+}

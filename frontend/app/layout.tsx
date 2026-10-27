@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
 import ThemeToggle from "@/components/ThemeToggle";
+import SpotifyWidget from "@/components/SpotifyWidget";
 import { DEMO } from "@/lib/demo";
 import { JOBS_MODE } from "@/lib/mode";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
   description: "Off-campus job and internship openings from Telegram and YouTube in one place.",
 };
 
-const themeScript = `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
+const themeScript = `try{var t=localStorage.getItem('theme');if(t!=='light')document.documentElement.classList.add('dark')}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,10 +22,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ToastProvider>
-          <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
+          <div className="aurora" aria-hidden="true"><i /><i /><i /></div>
+          <header className="sticky top-0 z-40 animate-fade-up border-b border-slate-500/15 bg-[rgb(var(--bg)/0.55)] backdrop-blur-xl">
             <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-3">
               <Link href="/" className="text-lg font-bold tracking-tight">
-                Openings<span className="text-indigo-600">Hub</span>
+                Openings<span className="gradient-text">Hub</span>
               </Link>
               <nav className="ml-auto flex items-center gap-2 text-sm">
                 {!JOBS_MODE && (
@@ -52,7 +54,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Demo mode: showing sample data. Connect a backend (set <code>API_URL</code>) to see real openings.
             </div>
           )}
-          <main className="mx-auto max-w-4xl px-4 py-6">{children}</main>
+          <main className="mx-auto max-w-4xl px-4 pb-28 pt-6">{children}</main>
+          <SpotifyWidget />
         </ToastProvider>
       </body>
     </html>
