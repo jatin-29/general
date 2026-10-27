@@ -1,0 +1,27 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# NOTE: this uses the FREE plan. Free web services sleep after ~15 min idle (pausing the 5-minute
+# polling) and the SQLite file is wiped on every restart/deploy. For always-on polling with
+# persistent data use a paid plan + disk (or Postgres), which is a deliberate cost decision.
+services:
+  - type: web
+    name: openingshub-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: FRONTEND_ORIGIN
+        value: https://jatin-29.github.io
+      - key: DATABASE_URL
+        value: sqlite:////tmp/openingshub.db
+      - key: API_KEY
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION_STRING
+        sync: false

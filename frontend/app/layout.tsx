@@ -7,7 +7,7 @@ import { DEMO } from "@/lib/demo";
 
 export const metadata: Metadata = {
   title: "OpeningsHub",
-  description: "Off-campus job and internship openings from Telegram, WhatsApp and YouTube in one place.",
+  description: "Off-campus job and internship openings from Telegram and YouTube in one place.",
 };
 
 const themeScript = `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
@@ -29,8 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                   Dashboard
                 </Link>
-                <Link href="/upload" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
-                  Upload
+                <Link href="/sources" className="rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  Sources
                 </Link>
                 <ThemeToggle />
               </nav>

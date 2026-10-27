@@ -60,10 +60,14 @@ def test_api(db, llm):
     assert c.get("/api/openings", params={"hide_applied": True}).json()["total"] == 0
     assert c.get("/api/openings/999").status_code == 404
     # sources
-    s = c.post("/api/sources", json={"type": "telegram", "identifier": "@jobs"})
+    body = {"type": "telegram", "identifier": "@jobs"}
+    assert c.post("/api/sources", json=body).status_code == 401  # API_KEY configured => key required
+    c.headers["X-API-Key"] = "test-key"
+    s = c.post("/api/sources", json=body)
     assert s.status_code == 201 and s.json()["identifier"] == "jobs"
     assert c.post("/api/sources", json={"type": "telegram", "identifier": "jobs"}).status_code == 409
     assert c.post("/api/sources", json={"type": "bogus", "identifier": "x"}).status_code == 422
     assert c.patch(f"/api/sources/{s.json()['id']}", json={"enabled": False}).json()["enabled"] is False
     # scrape/now auth
+    c.headers.pop("X-API-Key")
     assert c.post("/api/scrape/now").status_code == 401

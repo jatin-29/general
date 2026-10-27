@@ -53,6 +53,13 @@ def require_api_key(x_api_key: str = Header(default="")):
         raise HTTPException(401, "Invalid API key")
 
 
+def require_key_if_configured(x_api_key: str = Header(default="")):
+    """Mutating endpoints: open for local dev (no API_KEY set), locked once API_KEY is configured."""
+    key = get_settings().api_key
+    if key and not secrets.compare_digest(x_api_key, key):
+        raise HTTPException(401, "Invalid or missing API key")
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -118,7 +125,7 @@ def list_sources(db: Session = Depends(get_db)):
     return db.scalars(select(Source).order_by(Source.id)).all()
 
 
-@app.post("/api/sources", response_model=SourceOut, status_code=201)
+@app.post("/api/sources", response_model=SourceOut, status_code=201, dependencies=[Depends(require_key_if_configured)])
 def create_source(body: SourceCreate, db: Session = Depends(get_db)):
     if body.type not in REGISTRY:
         raise HTTPException(422, f"Unknown source type; expected one of {sorted(REGISTRY)}")
@@ -135,7 +142,7 @@ def create_source(body: SourceCreate, db: Session = Depends(get_db)):
     return s
 
 
-@app.patch("/api/sources/{source_id}", response_model=SourceOut)
+@app.patch("/api/sources/{source_id}", response_model=SourceOut, dependencies=[Depends(require_key_if_configured)])
 def patch_source(source_id: int, body: SourcePatch, db: Session = Depends(get_db)):
     s = db.get(Source, source_id)
     if not s:
@@ -173,7 +180,7 @@ def _decode(data: bytes) -> str:
     return data.decode("latin-1")
 
 
-@app.post("/api/upload/whatsapp", response_model=UploadResult)
+@app.post("/api/upload/whatsapp", response_model=UploadResult, dependencies=[Depends(require_key_if_configured)])
 def upload_whatsapp(
     file: UploadFile = File(...),
     group_name: str | None = Form(None),

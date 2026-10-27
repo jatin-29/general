@@ -60,7 +60,7 @@ def test_group_name_from_filename():
 def test_upload_endpoint(db, llm):
     app.dependency_overrides[get_llm] = lambda: llm
     try:
-        c = TestClient(app)
+        c = TestClient(app, headers={"X-API-Key": "test-key"})
         files = {"file": ("WhatsApp Chat with Jobs Group.txt", ANDROID.encode(), "text/plain")}
         r = c.post("/api/upload/whatsapp", files=files)
         assert r.status_code == 200, r.text

@@ -1,10 +1,18 @@
-import { DEMO, demoOpening, demoOpenings, demoSetApplied } from "./demo";
+import { DEMO, demoOpening, demoOpenings, demoSetApplied, demoSources } from "./demo";
 
 export { DEMO };
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type EmploymentType = "internship" | "full-time" | "contract";
 export type SourceType = "telegram" | "youtube" | "whatsapp";
+
+export interface Source {
+  id: number;
+  type: SourceType;
+  identifier: string;
+  enabled: boolean;
+  last_checked_at: string | null;
+}
 
 export interface Opening {
   id: number;
@@ -43,13 +51,6 @@ export interface OpeningFilters {
   hide_applied?: boolean;
   page?: number;
   limit?: number;
-}
-
-export interface UploadResult {
-  source_name: string;
-  parsed_messages: number;
-  new_items: number;
-  openings_found: number;
 }
 
 export class ApiError extends Error {
@@ -102,32 +103,22 @@ export const setApplied = (id: number, applied: boolean) =>
     body: JSON.stringify({ applied }),
   });
 
-/** Upload with real upload-progress events (fetch can't report them). */
-export function uploadWhatsApp(
-  file: File,
-  onProgress: (pct: number) => void,
-  onUploaded: () => void,
-  groupName?: string,
-): Promise<UploadResult> {
-  if (DEMO) return Promise.reject(new ApiError("Uploads need a backend. This is a demo with sample data.", 0));
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_URL}/api/upload/whatsapp`);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-    xhr.upload.onload = onUploaded;
-    xhr.onerror = () => reject(new ApiError("Cannot reach the server. Is the backend running?", 0));
-    xhr.onload = () => {
-      let body: any = null;
-      try {
-        body = JSON.parse(xhr.responseText);
-      } catch {}
-      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as UploadResult);
-      const detail = typeof body?.detail === "string" ? body.detail : `Upload failed (${xhr.status})`;
-      reject(new ApiError(detail, xhr.status));
-    };
-    const form = new FormData();
-    form.append("file", file);
-    if (groupName?.trim()) form.append("group_name", groupName.trim());
-    xhr.send(form);
-  });
-}
+const DEMO_MSG = "Demo mode: connect a backend (set API_URL) to manage sources.";
+const keyHeader = (apiKey: string) => ({ "Content-Type": "application/json", "X-API-Key": apiKey });
+
+export const getSources = () => (DEMO ? Promise.resolve(demoSources()) : request<Source[]>("/api/sources"));
+
+export const createSource = (type: SourceType, identifier: string, apiKey: string) =>
+  DEMO
+    ? Promise.reject(new ApiError(DEMO_MSG, 0))
+    : request<Source>("/api/sources", { method: "POST", headers: keyHeader(apiKey), body: JSON.stringify({ type, identifier }) });
+
+export const setSourceEnabled = (id: number, enabled: boolean, apiKey: string) =>
+  DEMO
+    ? Promise.reject(new ApiError(DEMO_MSG, 0))
+    : request<Source>(`/api/sources/${id}`, { method: "PATCH", headers: keyHeader(apiKey), body: JSON.stringify({ enabled }) });
+
+export const scrapeNow = (apiKey: string) =>
+  DEMO
+    ? Promise.reject(new ApiError(DEMO_MSG, 0))
+    : request<{ new_items: number; openings: number; errors: number }>("/api/scrape/now", { method: "POST", headers: keyHeader(apiKey) });

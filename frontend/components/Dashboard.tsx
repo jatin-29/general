@@ -156,7 +156,7 @@ export default function Dashboard() {
       ) : data && data.items.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="font-medium">No openings found</p>
-          <p className="mt-1 text-sm text-slate-500">Try clearing filters, add sources, or upload a WhatsApp export.</p>
+          <p className="mt-1 text-sm text-slate-500">Try clearing filters, or add a Telegram channel on the Sources page.</p>
         </div>
       ) : (
         <div className="space-y-3">

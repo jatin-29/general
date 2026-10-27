@@ -1,4 +1,4 @@
-import type { Opening, OpeningDetail, OpeningFilters, OpeningList } from "./api";
+import type { Opening, OpeningDetail, OpeningFilters, OpeningList, Source } from "./api";
 
 /** Demo mode (no backend): sample openings so a static deploy is explorable. Applied state is kept in localStorage. */
 export const DEMO = process.env.NEXT_PUBLIC_DEMO === "true";
@@ -13,10 +13,10 @@ const day = (offset: number | null) => {
 const SAMPLES: [string, string, string, Opening["employment_type"], number | null, Opening["source_type"], string, string | null][] = [
   ["Acme Technologies", "Software Engineer Intern", "Remote", "internship", 3, "telegram", "offcampus_jobs", "2026 batch, BE/BTech CS/IT"],
   ["Globex", "Backend Engineer", "Bengaluru", "full-time", 20, "youtube", "Placement Guide", "0-2 years"],
-  ["Initech", "QA Engineer (Contract)", "Pune", "contract", null, "whatsapp", "Jobs Group", "Any graduate"],
+  ["Initech", "QA Engineer (Contract)", "Pune", "contract", null, "telegram", "dev_openings", "Any graduate"],
   ["Umbrella Labs", "Data Analyst Intern", "Hyderabad", "internship", 6, "telegram", "offcampus_jobs", "Pursuing or completed any degree"],
   ["Hooli", "Frontend Developer", "Remote", "full-time", 12, "telegram", "dev_openings", "1+ year React/TypeScript"],
-  ["Stark Industries", "ML Research Intern", "Mumbai", "internship", 1, "whatsapp", "Jobs Group", "2025/2026 batch, strong Python"],
+  ["Stark Industries", "ML Research Intern", "Mumbai", "internship", 1, "telegram", "dev_openings", "2025/2026 batch, strong Python"],
   ["Wayne Enterprises", "DevOps Engineer", "Chennai", "full-time", 30, "youtube", "Placement Guide", "2-4 years, AWS"],
   ["Legacy Co", "Support Engineer", "Delhi", "full-time", -5, "telegram", "offcampus_jobs", null],
 ];
@@ -79,3 +79,9 @@ export function demoSetApplied(id: number, applied: boolean): Opening {
   } catch {}
   return demoOpening(id)!;
 }
+
+export const demoSources = (): Source[] => [
+  { id: 1, type: "telegram", identifier: "offcampus_jobs", enabled: true, last_checked_at: null },
+  { id: 2, type: "telegram", identifier: "dev_openings", enabled: true, last_checked_at: null },
+  { id: 3, type: "youtube", identifier: "UC_sample_channel_id", enabled: false, last_checked_at: null },
+];

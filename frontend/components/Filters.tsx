@@ -33,7 +33,6 @@ export default function Filters({
         <option value="">All sources</option>
         <option value="telegram">Telegram</option>
         <option value="youtube">YouTube</option>
-        <option value="whatsapp">WhatsApp</option>
       </select>
       <select className="input" aria-label="Employment type" value={value.type} onChange={(e) => onChange({ type: e.target.value })}>
         <option value="">All types</option>

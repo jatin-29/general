@@ -54,7 +54,7 @@ npm run dev                  # http://localhost:3000
 
 ## Choosing which groups/channels to read
 
-Add one **Source** per channel/group, via the API (a UI for this isn't built yet):
+Add one **Source** per channel on the site's **Sources** page (enter your backend's `API_KEY` there once; it's stored only in your browser), or via the API:
 
 ```bash
 # public Telegram channel/group  (@username or t.me link)
@@ -123,3 +123,7 @@ Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked)
 * **Backend:** needs a long-running process (Render, Railway, Fly.io, a VPS), not serverless, because the scheduler runs inside it. Run a **single instance** (multiple would duplicate polling). Set `FRONTEND_ORIGIN` to your frontend URL (comma-separate several) for CORS, and set `API_KEY`.
 * **Database:** SQLite needs a persistent volume. For Postgres: `pip install "psycopg[binary]"` and `DATABASE_URL=postgresql+psycopg://user:pass@host/db` (not tested in this repo; tables are created on start-up, there are no migrations yet).
 * **Security:** `/api/upload/whatsapp`, `/api/sources` and the PATCH endpoints are unauthenticated (the dashboard is meant for personal use) and an upload spends Anthropic credits. If you expose the backend publicly, put it behind auth (a reverse proxy with basic auth, Cloudflare Access, etc.).
+
+## Hosting the backend (Render)
+
+`render.yaml` + `backend/Dockerfile` deploy the API as a Render Blueprint: *New → Blueprint →* pick this repo, then fill the `sync: false` env vars (`ANTHROPIC_API_KEY`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_SESSION_STRING`). `API_KEY` is generated; copy it from the service's Environment tab. It's configured for Render's **free** plan, which sleeps when idle (pausing polling) and loses the SQLite file on restart; use a paid plan with a disk or Postgres for always-on use. Then set the `API_URL` Actions variable to the service URL and re-run the Pages workflow.
