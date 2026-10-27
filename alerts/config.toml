@@ -5,7 +5,7 @@
 telegram_chats = [
   "@job4fresherss",
   "@jobsandinternshipsupdates",
-  # private group: add its id here, like "-1001234567890"
+  "-1004427381551",  # Premium Membership (private)
 ]
 
 # YouTube channels: channel URL, @handle, or channel id (UC...).
