@@ -114,7 +114,7 @@ Covers the WhatsApp parser, dedupe, extractor JSON validation/retry (LLM mocked)
 
 ## Deployment notes
 
-* **Frontend on GitHub Pages:** the frontend is a static export, and `.github/workflows/pages.yml` builds and deploys it on every push to `main` that touches `frontend/`. One-time setup:
+* **Frontend on GitHub Pages:** the frontend is a static export, and `.github/workflows/pages.yml` builds and deploys it on every push to `main` (or this repo's default branch) that touches `frontend/`. One-time setup:
   1. Deploy the backend somewhere with HTTPS first (GitHub Pages can't run Python; see Backend below).
   2. Repo **Settings → Secrets and variables → Actions → Variables**: add `API_URL` = your backend's `https://…` URL (no trailing slash).
   3. Repo **Settings → Pages → Source: GitHub Actions**.

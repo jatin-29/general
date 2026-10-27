@@ -2,7 +2,7 @@ name: Deploy frontend to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/festive-heisenberg-vwx16q]
     paths: ["frontend/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
