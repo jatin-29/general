@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import MenuButton from "@/components/MenuButton";
 import SpotifyWidget from "@/components/SpotifyWidget";
 
-export const viewport = { themeColor: "#a855f7" };
+export const viewport = { themeColor: "#4d5a4b" };
 
 export const metadata: Metadata = {
   title: "OpeningsHub",

@@ -6,10 +6,11 @@
 
 /* ---------- tokens (space-separated RGB so Tailwind opacity works) ---------- */
 :root {
-  --accent: 168 85 247;
-  --accent-light: 196 138 252;
-  --accent-dark: 126 34 206;
-  --accent-2: 244 114 182;
+  /* olive green + amber (Spotify's album colours replace these while a song plays) */
+  --accent: 162 209 97;
+  --accent-light: 190 223 144;
+  --accent-dark: 134 190 55;
+  --accent-2: 230 166 76;
   --sky: 142 197 252;
   --ink: 31 29 77;
   --surface: 255 255 255;
