@@ -25,6 +25,22 @@ On first poll a Telegram source backfills its latest 50 messages; afterwards onl
 
 **YouTube note:** YouTube's RSS feed sometimes returns 404 to server/datacenter IPs (it did in the environment this was built in). If a channel fails, add a free YouTube Data API key in Settings and the collector uses the API instead.
 
+## Chrome extension: autofill job forms
+
+`extension/` is a Chrome extension (Manifest V3) that fills job application forms with the details on the
+site's **My profile** page: Google Forms, Workday, Greenhouse, Lever, Ashby, SmartRecruiters, Darwinbox, Keka
+and any other site (via the extension button or **Alt+Shift+F**). It also puts your resume PDF into the
+"Resume / CV" upload box. It never submits a form: filled fields turn green, and required ones it couldn't
+answer turn yellow for you.
+
+- **Install:** *My profile → Chrome extension → Download*, unzip, `chrome://extensions` → Developer mode →
+  *Load unpacked* → pick the `openingshub-autofill` folder. The Pages workflow builds the zip from `extension/`.
+- **Your details:** when you open the site, `sync.js` copies the profile from the site's localStorage into the
+  extension's local storage. Nothing is sent anywhere. Questions it can't map get answered from
+  *My profile → Saved answers* ("if the question contains … answer …").
+- **Test:** `node extension/test/e2e.cjs` loads the real extension in Chromium and fills look-alike Google
+  Form, Workday and Greenhouse pages served at their real addresses.
+
 ## Run locally
 
 ```bash

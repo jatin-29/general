@@ -1,0 +1,37 @@
+:root {
+  --ink: #1e1b4b;
+  --muted: #64748b;
+  --line: #ede9fe;
+  --bg: #ffffff;
+  --soft: #faf5ff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #ede9fe; --muted: #a5a3c4; --line: #2e2a4f; --bg: #15122b; --soft: #1d1938; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { width: 320px; margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; color: #fff; background: linear-gradient(135deg, #ff8fb8, #c26bff 55%, #7c3aed); }
+header img { border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
+header b { display: block; font-size: 15px; }
+header small { display: block; opacity: .92; font-weight: 600; }
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px 16px; }
+h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+section { padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); }
+.row { display: flex; align-items: center; gap: 6px; }
+.file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.btn { border: 0; cursor: pointer; border-radius: 999px; font: inherit; font-weight: 800; text-decoration: none; text-align: center; }
+.btn.primary { padding: 11px; color: #fff; font-size: 14px; background: linear-gradient(135deg, #ec4899, #8b5cf6); box-shadow: 0 6px 18px rgba(139, 92, 246, .35); }
+.btn.primary:disabled { opacity: .7; cursor: progress; }
+.btn.ghost { padding: 7px 12px; color: #6d28d9; background: rgba(139, 92, 246, .12); }
+.btn.small { padding: 5px 10px; font-size: 12px; }
+.callout { display: grid; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 14px; background: #fef3c7; color: #78350f; }
+.result { margin: 0; padding: 9px 12px; border-radius: 12px; background: #dcfce7; color: #14532d; font-weight: 600; }
+.result.warn { background: #fef3c7; color: #78350f; }
+.result.err { background: #fee2e2; color: #7f1d1d; }
+.toggle { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.toggle input { accent-color: #8b5cf6; width: 16px; height: 16px; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+kbd { padding: 1px 5px; border: 1px solid var(--line); border-radius: 5px; font: 600 11px ui-monospace, monospace; }
+.link { color: #8b5cf6; font-weight: 700; text-decoration: none; }

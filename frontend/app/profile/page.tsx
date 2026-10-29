@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { emptyProfile, loadProfile, saveProfile, skillList, type Education, type Experience, type Profile, type Project } from "@/lib/profile";
+import { emptyProfile, loadProfile, saveProfile, skillList, type Answer, type Education, type Experience, type Profile, type Project } from "@/lib/profile";
 import { DEFAULT_TEMPLATES, loadTemplates, saveTemplates, type Kind, type Templates, type Tone } from "@/lib/templates";
 import { loadJSON, saveJSON } from "@/lib/store";
 import { useToast } from "@/components/Toast";
@@ -10,9 +10,9 @@ import { useToast } from "@/components/Toast";
 const lbl = "block space-y-1 text-sm font-semibold";
 const inp = "input font-normal";
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Section({ title, hint, id, children }: { title: string; hint?: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="card space-y-4 p-5">
+    <section id={id} className="card scroll-mt-6 space-y-4 p-5">
       <div>
         <h2 className="font-display text-lg font-black">{title}</h2>
         {hint && <p className="text-xs text-slate-500">{hint}</p>}
@@ -37,6 +37,54 @@ function Area({ label, value, onChange, placeholder, rows = 3 }: { label: string
       {label}
       <textarea className={`${inp} leading-relaxed`} rows={rows} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
+  );
+}
+
+function Choice({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <label className={lbl}>
+      {label}
+      <select className={inp} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not set</option>
+        {options.map((o) => <option key={o}>{o}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/** Install steps, and whether the extension is running in this browser (it marks the page when it is). */
+function ExtensionCard() {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => setVersion(document.documentElement.dataset.ohExtension ?? null);
+    read();
+    window.addEventListener("openingshub:extension", read);
+    const t = setTimeout(read, 1500);
+    return () => {
+      window.removeEventListener("openingshub:extension", read);
+      clearTimeout(t);
+    };
+  }, []);
+  const zip = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/openingshub-autofill.zip`;
+  return (
+    <>
+      {version ? (
+        <p className="rounded-2xl bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Connected (version {version}). Your details on this page go to the extension automatically.</p>
+      ) : (
+        <p className="rounded-2xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">Not installed in this browser yet.</p>
+      )}
+      <ol className="list-decimal space-y-1.5 pl-5 text-sm">
+        <li><a className="font-bold text-violet-600 underline" href={zip} download>Download the extension</a> and unzip it.</li>
+        <li>In Chrome open <code className="rounded bg-slate-500/10 px-1">chrome://extensions</code> and turn on <b>Developer mode</b> (top right).</li>
+        <li>Click <b>Load unpacked</b> and pick the unzipped <b>openingshub-autofill</b> folder.</li>
+        <li>Pin it (puzzle icon → pin), reload this page, then add your resume PDF in the extension.</li>
+      </ol>
+      <p className="text-xs text-slate-500">
+        On a job form click <b>⚡ Autofill</b> (bottom right on Google Forms, Workday, Greenhouse, Lever…), or the extension icon, or press <b>Alt+Shift+F</b> on any site.
+        Filled fields turn green; required ones it couldn&apos;t answer turn yellow. It never submits for you. Works in Chrome, Edge and Brave on a computer (phones don&apos;t support extensions).
+        To update: download again, replace the folder, and press ↻ on the extension in chrome://extensions.
+      </p>
+    </>
   );
 }
 
@@ -84,6 +132,10 @@ export default function ProfilePage() {
     setP(loadProfile());
     setTpl(loadTemplates());
   }, []);
+  const loaded = p !== null;
+  useEffect(() => {
+    if (loaded && location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  }, [loaded]);
 
   const update = (patch: Partial<Profile>) =>
     setP((prev) => {
@@ -231,6 +283,41 @@ export default function ProfilePage() {
           <Area label="Achievements" value={p.achievements} onChange={(v) => update({ achievements: v })} rows={4} placeholder={"Rank 120 in CodeChef Starters\nWinner, college hackathon 2025"} />
           <Area label="Certifications" value={p.certifications} onChange={(v) => update({ certifications: v })} rows={4} />
         </div>
+      </Section>
+
+      <Section title="Application forms" hint="Extra details job forms keep asking for. The Chrome extension fills these in; leave anything blank to skip it.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Choice label="Gender" value={p.gender} onChange={(v) => update({ gender: v })} options={["Male", "Female", "Non-binary", "Prefer not to say"]} />
+          <Field label="Date of birth" type="date" value={p.dob} onChange={(v) => update({ dob: v })} />
+          <Field label="Address" value={p.address} onChange={(v) => update({ address: v })} placeholder="House no., street, area" wide />
+          <Field label="State" value={p.state} onChange={(v) => update({ state: v })} placeholder="Delhi" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Country" value={p.country} onChange={(v) => update({ country: v })} placeholder="India" />
+            <Field label="PIN code" value={p.pincode} onChange={(v) => update({ pincode: v })} placeholder="110001" />
+          </div>
+          <Field label="Work experience (years)" value={p.experienceYears} onChange={(v) => update({ experienceYears: v })} placeholder="0 for freshers" />
+          <Field label="Notice period" value={p.noticePeriod} onChange={(v) => update({ noticePeriod: v })} placeholder="Immediate / 30 days" />
+          <Field label="Current CTC / stipend" value={p.currentCtc} onChange={(v) => update({ currentCtc: v })} placeholder="0 / 3.6 LPA" />
+          <Field label="Expected CTC" value={p.expectedCtc} onChange={(v) => update({ expectedCtc: v })} placeholder="6 LPA" />
+          <Choice label="Willing to relocate" value={p.relocate} onChange={(v) => update({ relocate: v })} options={["Yes", "No"]} />
+        </div>
+      </Section>
+
+      <Section title="Saved answers" hint='For other questions forms keep asking. When a question contains your words, the extension answers it. E.g. "hear about" → LinkedIn, "previously worked" → No, "authorized to work" → Yes.'>
+        <ListEditor<Answer>
+          items={p.answers} onChange={(v) => update({ answers: v })} addLabel="Add an answer"
+          blank={{ q: "", a: "" }}
+          render={(x, set) => (
+            <>
+              <Field label="If the question contains" value={x.q} onChange={(v) => set({ q: v })} placeholder="hear about" />
+              <Field label="Answer" value={x.a} onChange={(v) => set({ a: v })} placeholder="LinkedIn" />
+            </>
+          )}
+        />
+      </Section>
+
+      <Section id="extension" title="Chrome extension: autofill job forms" hint="Fills Google Forms, Workday, company career pages and more with the details on this page.">
+        <ExtensionCard />
       </Section>
 
       <Section title="Message templates" hint="Edit the wording used in the Apply kit. Placeholders like {company} {role} {name} {college} {skills} {resume} {linkedin} {contact} are filled in for you; a line whose placeholder is empty is left out.">

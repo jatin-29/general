@@ -3,7 +3,7 @@ name: Deploy frontend to GitHub Pages
 on:
   push:
     branches: [main, claude/festive-heisenberg-vwx16q]
-    paths: ["frontend/**", ".github/workflows/pages.yml"]
+    paths: ["frontend/**", "extension/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -40,6 +40,11 @@ jobs:
           npm ci
           npm run build
           touch out/.nojekyll
+      - name: Package the Chrome extension (downloadable from My profile)
+        run: |
+          cp -r extension "$RUNNER_TEMP/openingshub-autofill"
+          rm -rf "$RUNNER_TEMP/openingshub-autofill/test"
+          (cd "$RUNNER_TEMP" && zip -qr "$GITHUB_WORKSPACE/frontend/out/openingshub-autofill.zip" openingshub-autofill)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/out

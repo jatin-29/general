@@ -54,6 +54,7 @@ export default function MenuButton() {
           {JOBS_MODE && <Link href="/" className={item} onClick={() => setOpen(false)}>🏠 Jobs</Link>}
           {JOBS_MODE && <Link href="/profile" className={item} onClick={() => setOpen(false)}>👤 My profile</Link>}
           {JOBS_MODE && <Link href="/resume" className={item} onClick={() => setOpen(false)}>📄 Resume builder</Link>}
+          {JOBS_MODE && <Link href="/profile#extension" className={item} onClick={() => setOpen(false)}>⚡ Autofill extension</Link>}
           {JOBS_MODE && onJobs && <button className={item} onClick={act("openings:add")}>＋ Add a job</button>}
           <button className={item} onClick={act("openings:spotify")}>♫ Spotify</button>
           <div className="flex items-center justify-between rounded-xl px-3 py-1.5 text-sm font-semibold">

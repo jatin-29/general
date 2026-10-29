@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpeningsHub Autofill</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/48.png" alt="" width="36" height="36" />
+      <div>
+        <b>OpeningsHub Autofill</b>
+        <small id="who">Loading…</small>
+      </div>
+    </header>
+
+    <main>
+      <p id="connect" class="callout" hidden>
+        <span>Not connected yet. Open <b>My profile</b> on your site once in this browser and your details come over by themselves.</span>
+        <a id="open-site" class="btn ghost" target="_blank">Open My profile ↗</a>
+      </p>
+
+      <button id="fill" class="btn primary">⚡ Fill this page</button>
+      <p id="result" class="result" hidden></p>
+
+      <section>
+        <h2>Resume PDF</h2>
+        <div class="row">
+          <span id="resume-name" class="file">No file yet</span>
+          <button id="pick" class="btn ghost small">Choose PDF</button>
+          <button id="remove" class="btn ghost small" hidden>Remove</button>
+        </div>
+        <input id="file" type="file" accept=".pdf,.doc,.docx,application/pdf" hidden />
+        <p class="hint">Put into "Resume / CV" upload boxes. Make one with the site's Resume builder (Print → Save as PDF).</p>
+      </section>
+
+      <label class="toggle"><input id="show" type="checkbox" /> Show the ⚡ button on job sites</label>
+
+      <p class="hint">
+        Shortcut: <kbd id="keys">Alt+Shift+F</kbd>. Fields filled turn green, required ones left for you turn yellow.
+        Nothing is submitted for you, and your details never leave this browser.
+      </p>
+      <a id="edit" class="link" target="_blank">Edit my details ↗</a>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
