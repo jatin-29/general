@@ -145,7 +145,7 @@ type Quick = "all" | "new" | "soon" | "mine";
 function Tile({ label, n, bg, shadow, active, onClick, delay, glyph }: { label: string; n: number; bg: string; shadow: string; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center">
-      <button className="tile" aria-pressed={active} onClick={onClick} style={{ background: bg, animationDelay: `${delay}ms`, ["--tile-shadow" as string]: shadow }}>
+      <button className="tile" aria-pressed={active} aria-label={`${label}: ${n}`} onClick={onClick} style={{ background: bg, animationDelay: `${delay}ms`, ["--tile-shadow" as string]: shadow }}>
         <span className="glyph" aria-hidden="true">{glyph}</span>
         <span className="num"><CountUp value={n} /></span>
       </button>
@@ -167,6 +167,7 @@ export default function JobsFeed() {
   const [source, setSource] = useState("");
   const [quick, setQuick] = useState<Quick>("all");
   const [hideApplied, setHideApplied] = useState(false);
+  const [showRejected, setShowRejected] = useState(false); // rejected jobs are hidden unless you open this list
   const [tracker, setTrackerState] = useState<Tracker>({});
   const [kitJob, setKitJob] = useState<Job | null>(null);
   const [lastVisit, setLastVisit] = useState<number>(0);
@@ -248,6 +249,10 @@ export default function JobsFeed() {
       return next;
     });
   const statusOf = (id: string): Status => tracker[id]?.status ?? "";
+  const setStatus = (j: Job, st: Status) => {
+    setTrack(j.id, withStatus(tracker[j.id], st));
+    if (st === "rejected" && !showRejected) toast("Marked rejected and removed from your list. Find it under \"rejected hidden\" if you need it.", "success");
+  };
 
   const addManual = (job: Job) => {
     const next = [job, ...manual];
@@ -312,25 +317,31 @@ export default function JobsFeed() {
     return d >= 0 && d <= 7;
   };
 
+  // Jobs you were rejected from leave the list and the counts.
+  const rejected = useMemo(() => all.filter((j) => tracker[j.id]?.status === "rejected"), [all, tracker]);
+  const open = useMemo(() => all.filter((j) => tracker[j.id]?.status !== "rejected"), [all, tracker]);
   const counts = useMemo(
-    () => ({ total: all.length, fresh: all.filter(isNewJob).length, soon: all.filter(isSoon).length, mine: all.filter((j) => statusOf(j.id)).length }),
+    () => ({ total: open.length, fresh: open.filter(isNewJob).length, soon: open.filter(isSoon).length, mine: open.filter((j) => statusOf(j.id)).length }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [all, isNewJob, tracker],
+    [open, isNewJob, tracker],
   );
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return all.filter(
+    return (showRejected ? rejected : open).filter(
       (j) =>
         (!source || j.source === source) &&
-        (quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : !!statusOf(j.id))) &&
-        (!hideApplied || !DONE_APPLYING.includes(statusOf(j.id))) &&
+        (showRejected || quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : !!statusOf(j.id))) &&
+        (showRejected || !hideApplied || !DONE_APPLYING.includes(statusOf(j.id))) &&
         (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all, search, source, quick, hideApplied, tracker, isNewJob]);
+  }, [open, rejected, showRejected, search, source, quick, hideApplied, tracker, isNewJob]);
 
-  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied]);
+  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected]);
+  useEffect(() => {
+    if (showRejected && rejected.length === 0) setShowRejected(false);
+  }, [showRejected, rejected.length]);
 
   if (locked !== "no") {
     return (
@@ -355,7 +366,10 @@ export default function JobsFeed() {
     );
   }
 
-  const tile = (q: Quick) => () => setQuick(quick === q ? "all" : q);
+  const tile = (q: Quick) => () => {
+    setShowRejected(false);
+    setQuick(quick === q ? "all" : q);
+  };
   return (
     <div>
       {/* ---------- hero ---------- */}
@@ -374,7 +388,7 @@ export default function JobsFeed() {
             <Tile label="New" n={counts.fresh} bg="linear-gradient(160deg,#ff9ec4,#ff6fa5)" shadow="rgb(255 80 150 / .6)" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
             <Tile label="Closing soon" n={counts.soon} bg="linear-gradient(160deg,#8fd3ff,#4aa8ff)" shadow="rgb(60 150 255 / .6)" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
             <Tile label="My applications" n={counts.mine} bg="linear-gradient(160deg,#7be0b4,#22b07d)" shadow="rgb(30 170 110 / .55)" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
-            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all"} onClick={() => setQuick("all")} delay={700} glyph={Grid} />
+            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setQuick("all"); }} delay={700} glyph={Grid} />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
@@ -386,11 +400,19 @@ export default function JobsFeed() {
       {/* ---------- list ---------- */}
       <section id="jobs" className="scroll-mt-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="font-display text-3xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">Latest openings</h2>
+          <h2 className="font-display text-3xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">{showRejected ? "Rejected" : "Latest openings"}</h2>
           <p className="text-xs font-semibold text-white/90">
             {jobs || manual.length ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : ""}
             {updatedAt ? ` · Updated ${timeAgo(updatedAt)}` : ""} ·{" "}
             <button onClick={() => refresh()} className="underline">Refresh</button>
+            {(rejected.length > 0 || showRejected) && (
+              <>
+                {" · "}
+                <button onClick={() => setShowRejected(!showRejected)} className="underline">
+                  {showRejected ? "Back to openings" : `${rejected.length} rejected hidden`}
+                </button>
+              </>
+            )}
           </p>
         </div>
 
@@ -423,7 +445,7 @@ export default function JobsFeed() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {visible.slice(0, shown).map((j, i) => (
-              <JobCard key={j.id} index={i} job={j} track={tracker[j.id]} onStatus={(st) => setTrack(j.id, withStatus(tracker[j.id], st))} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
+              <JobCard key={j.id} index={i} job={j} track={tracker[j.id]} onStatus={(st) => setStatus(j, st)} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
             ))}
             {visible.length > shown && (
               <button className="btn-pill justify-center self-start lg:col-span-2 lg:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
