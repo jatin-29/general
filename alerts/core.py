@@ -23,6 +23,9 @@ class Config:
     accept_all: list[str] = field(default_factory=list)  # chats where every text post counts (exclude still applies)
     first_run_backfill: int = 3
     max_chars: int = 700
+    # Telegram bot chat that MacroDroid fills with WhatsApp notifications ("WA: <title> || <text>").
+    # "auto" finds it by itself; "" turns it off; or name it, e.g. "@my_jobs_bot".
+    whatsapp_inbox: str = "auto"
 
 
 def load_config(path: str | Path) -> Config:
@@ -112,6 +115,7 @@ class State:
         self.youtube: dict[str, list[str]] = d.get("youtube", {})
         self.seen: list[str] = d.get("seen", [])
         self.channels: dict[str, str] = d.get("channels", {})  # youtube handle -> channel id
+        self.whatsapp: int = d.get("whatsapp", 0)  # last message id read from the WhatsApp inbox chat
 
     @classmethod
     def load(cls, path: str | Path) -> "State":
@@ -131,6 +135,44 @@ class State:
     def mark_seen(self, fp: str) -> None:
         if fp not in self.seen:
             self.seen.append(fp)
+
+
+# ---------------------------------------------------------------- WhatsApp (via phone notifications)
+WA_MARK = re.compile(r"^\s*WA:\s*(?P<title>[^\n]*?)\s*\|\|\s*(?P<text>.*)$", re.S)
+WA_NOISE = re.compile(
+    r"^(\d+ (new )?messages?( from \d+ chats?)?|checking for new messages|whatsapp web is currently active|"
+    r"this message was deleted|(missed|incoming|ongoing) (voice|video) call|.{0,3}(photo|video|voice message|audio|sticker|gif|document))$",
+    re.I,
+)
+# "Hiring: SDE intern" starts like "Rahul: hi", but it is the post itself
+WA_NOT_SENDER = re.compile(r"^(hiring|job|jobs|role|position|company|location|eligibility|salary|ctc|stipend|apply|batch|openings?|urgent|update|alert|note|link|deadline)$", re.I)
+
+
+def parse_wa(message: str) -> tuple[str, str] | None:
+    """MacroDroid's "WA: <notification title> || <notification text>" -> (group, post), or None for noise."""
+    m = WA_MARK.match(message or "")
+    if not m:
+        return None
+    title, text = m["title"].strip(), m["text"].strip()
+    group = re.split(r"\s*\(\d+ (?:new )?messages?\)|:\s", title, maxsplit=1)[0].strip() or "WhatsApp"
+    if ":" not in title:  # group notifications put the sender in front of the text: "~ Rahul: We're hiring"
+        sender = re.match(r"^(~\s?)?([\w .'+()\-]{1,40}):\s+", text)
+        if sender and not WA_NOT_SENDER.match(sender[2].strip()):
+            text = text[sender.end():]
+    if not text or WA_NOISE.match(text):
+        return None
+    return group, text
+
+
+def is_wa_job(text: str, cfg: "Config") -> bool:
+    """WhatsApp also carries chat ("are you applying for this job?"): a post needs an apply link or email
+    plus a job word, or two different job words and some length."""
+    if is_excluded(text, cfg.exclude):
+        return False
+    t = text.lower()
+    words = sum(1 for w in cfg.include if _has(t, w))
+    contact = bool(job_links(text)) or re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", text) is not None
+    return (contact and words >= 1 and len(text) >= 40) or (words >= 2 and len(text) >= 60)
 
 
 # ---------------------------------------------------------------- YouTube feed

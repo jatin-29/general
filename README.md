@@ -25,6 +25,15 @@ On first poll a Telegram source backfills its latest 50 messages; afterwards onl
 
 **YouTube note:** YouTube's RSS feed sometimes returns 404 to server/datacenter IPs (it did in the environment this was built in). If a channel fails, add a free YouTube Data API key in Settings and the collector uses the API instead.
 
+## WhatsApp groups (via phone notifications)
+
+WhatsApp has no API for reading your groups, and unofficial clients risk a ban, so nothing logs into WhatsApp.
+Instead, MacroDroid (free Android app) sends each WhatsApp notification to your own Telegram bot as
+`WA: <notification title> || <notification text>`. The collector finds that bot chat by itself
+(`whatsapp_inbox = "auto"` in `alerts/config.toml`), skips chat and summaries ("5 new messages"), keeps posts with
+an apply link/email and a job word (or two job words), and adds them to the website as "WhatsApp · <group>".
+Muted groups post no notifications: make job groups silent (custom notifications, tone None) instead of muting.
+
 ## My profile: fill from your resume
 
 *My profile → Fill from my resume* reads a PDF or Word (.docx) resume in the browser (pdf.js for PDFs, a small

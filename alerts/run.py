@@ -19,7 +19,8 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
-    Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, load_config, make_job, parse_feed,
+    Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
+    parse_wa,
 )
 
 log = logging.getLogger("alerts")
@@ -273,6 +274,57 @@ async def check_youtube(ref: str, state: State, cfg: Config, notify, api_key: st
     return sent
 
 
+# ---------------------------------------------------------------- WhatsApp inbox
+async def find_whatsapp_inbox(client, cfg: Config):
+    """The bot chat MacroDroid sends WhatsApp notifications to (found by its "WA:" messages)."""
+    ref = (cfg.whatsapp_inbox or "").strip()
+    if not ref:
+        return None
+    if ref.lower() != "auto":
+        return await client.get_entity(clean_ref(ref))
+    async for d in client.iter_dialogs(limit=200):
+        if getattr(d.entity, "bot", False) and (getattr(d.message, "message", None) or "").lstrip().startswith("WA:"):
+            return d.entity
+    return None
+
+
+async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | None = None) -> int:
+    """Job posts from WhatsApp groups, forwarded by MacroDroid on your phone. Returns how many were new."""
+    inbox = await find_whatsapp_inbox(client, cfg)
+    if inbox is None:
+        log.info("whatsapp: no inbox chat yet (set up MacroDroid to send 'WA: …' messages to your bot)")
+        return 0
+    if state.whatsapp:
+        msgs = [m async for m in client.iter_messages(inbox, min_id=state.whatsapp, limit=500)]
+    else:  # first time: the recent ones
+        msgs = [m async for m in client.iter_messages(inbox, limit=50)]
+    msgs.sort(key=lambda m: m.id)
+    seen = {"added": 0, "noise": 0, "not_job": 0, "dup": 0}
+    new = 0
+    for m in msgs:
+        parsed = parse_wa(getattr(m, "message", None) or "")
+        if not parsed:
+            seen["noise"] += 1
+        elif not is_wa_job(parsed[1], cfg):
+            seen["not_job"] += 1
+        else:
+            group, text = parsed
+            fp = fingerprint(text)
+            if state.was_seen(fp) or (store is not None and fp in store.deleted):
+                seen["dup"] += 1
+            else:
+                if store is not None and store.allow_private and store.add(make_job(f"WhatsApp · {group}", text, None, getattr(m, "date", None), fp=fp)):
+                    seen["added"] += 1
+                state.mark_seen(fp)
+                new += 1
+        state.whatsapp = max(m.id, state.whatsapp)
+    log.info(
+        "whatsapp: looked at %d message(s): %d new job(s) (%d added to website), %d not jobs, %d notifications skipped, %d duplicates",
+        len(msgs), new, seen["added"], seen["not_job"], seen["noise"], seen["dup"],
+    )
+    return new
+
+
 # ---------------------------------------------------------------- main
 async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False, store: JobStore | None = None, rescan: int = 0) -> int:
     client = None
@@ -329,6 +381,12 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             except Exception as e:
                 errors += 1
                 log.error("telegram %s failed: %s", ref, e)
+        if client and cfg.whatsapp_inbox:
+            try:
+                total += await check_whatsapp(client, state, cfg, store)
+            except Exception as e:
+                errors += 1
+                log.error("whatsapp inbox failed: %s", e)
         for ref in cfg.youtube_channels:
             try:
                 n = await check_youtube(ref, state, cfg, outbox.add, env.get("YOUTUBE_API_KEY", ""), store=store)

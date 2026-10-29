@@ -7,6 +7,11 @@ telegram_chats = [
   "me",              # your Saved Messages: forward WhatsApp job posts here and they appear on the website
 ]
 
+# WhatsApp: MacroDroid on your phone sends each WhatsApp notification to your own Telegram bot as
+# "WA: <title> || <text>"; job posts from there go to the website ("WhatsApp · <group>").
+# "auto" finds that bot chat by itself; "" turns it off.
+whatsapp_inbox = "auto"
+
 # YouTube channels: channel URL, @handle, or channel id (UC...).
 youtube_channels = [
   # "@SomeJobsChannel",

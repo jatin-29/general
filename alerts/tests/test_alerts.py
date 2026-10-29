@@ -55,6 +55,11 @@ class FakeTelegram:
     def __init__(self, chats):
         self.chats = chats  # ref -> (entity, [(id, text)])
 
+    async def iter_dialogs(self, limit=None):
+        for ent, rows in self.chats.values():
+            last = max(rows, key=lambda r: r[0]) if rows else None
+            yield SimpleNamespace(entity=ent, message=SimpleNamespace(message=last[1]) if last else None)
+
     async def get_entity(self, ref):
         found = self.chats.get(ref) or self.chats.get(str(ref)) or self.chats["@" + str(ref)]  # run.py strips '@', ids become ints
         return found[0]
@@ -410,3 +415,46 @@ def test_rescan_of_saved_messages_keeps_deleted_old_forwards_deleted():
     sent, notify = make_notifier()
     run_async(run.check_telegram(tg, "me", state, Config(), notify, store, rescan=10))
     assert [j["text"] for j in store.jobs] == ["Zeta QA role https://zeta.io/careers"]
+
+
+# ---------------------------------------------------------------- WhatsApp via phone notifications
+def test_parse_wa_notifications():
+    from core import parse_wa
+
+    assert parse_wa("WA: Off Campus Jobs || ~ Rahul: We're hiring SDE interns at Acme https://acme.com/jobs/1") == (
+        "Off Campus Jobs", "We're hiring SDE interns at Acme https://acme.com/jobs/1")
+    assert parse_wa("WA: Off Campus Jobs (3 messages) || +91 98765 43210: Zeta hiring analysts") == ("Off Campus Jobs", "Zeta hiring analysts")
+    assert parse_wa("WA: Off Campus Jobs: Rahul || Hiring: QA intern at Beta") == ("Off Campus Jobs", "Hiring: QA intern at Beta")  # sender in title
+    assert parse_wa("WA: Jobs || Hiring: QA intern at Beta") == ("Jobs", "Hiring: QA intern at Beta")  # "Hiring:" is not a person
+    assert parse_wa("WA: Jobs || Line one\nLine two") == ("Jobs", "Line one\nLine two")
+    for noise in ("WA: WhatsApp || 5 new messages", "WA: Jobs || 12 messages from 4 chats", "WA: Jobs || Rahul: 📷 Photo",
+                  "WA: Jobs || This message was deleted", "hello", "WA: Jobs ||  "):
+        assert parse_wa(noise) is None, noise
+
+
+def test_whatsapp_inbox_adds_job_posts_once():
+    store, state = JobStore(password="pw"), State()
+    bot = SimpleNamespace(first_name="My jobs bot", username="my_jobs_bot", id=77, bot=True)
+    rows = [
+        (1, "WA: Off Campus Jobs || ~ Rahul: Acme is hiring SDE interns, 2026 batch. Apply: https://acme.com/careers/sde-intern"),
+        (2, "WA: Off Campus Jobs || ~ Priya: thanks bro"),
+        (3, "WA: WhatsApp || 3 new messages"),
+        (4, "WA: Tech Placements || ~ Amit: Acme is hiring SDE interns, 2026 batch. Apply: https://acme.com/careers/sde-intern"),  # same job, other group
+        (5, "WA: Mom || are you applying for this job or not, tell me today itself please beta"),  # one job word: chat
+        (6, "WA: Off Campus Jobs || ~ Neha: Hiring freshers for Data Analyst role at Kappa, send CV to hr@kappa.in"),
+    ]
+    cfg = load_config(Path(run.__file__).parent / "config.toml")  # your real keyword list
+    tg = FakeTelegram({"@friend": (SimpleNamespace(first_name="Friend", username="friend", id=5, bot=False), [(1, "WA: x || fake")]), "@my_jobs_bot": (bot, rows)})
+    assert run_async(run.check_whatsapp(tg, state, cfg, store)) == 2
+    assert [(j["source"], j["text"][:10]) for j in store.jobs] == [("WhatsApp · Off Campus Jobs", "Hiring fre"), ("WhatsApp · Off Campus Jobs", "Acme is hi")]
+    assert state.whatsapp == 6
+
+    rows.append((7, "WA: Tech Placements || ~ Amit: Zeta hiring data analyst interns, stipend 25k. https://zeta.io/jobs/42"))
+    assert run_async(run.check_whatsapp(tg, state, cfg, store)) == 1  # only the new one
+    assert store.jobs[0]["source"] == "WhatsApp · Tech Placements" and len(store.jobs) == 3
+
+
+def test_whatsapp_inbox_absent_or_off_is_quiet():
+    tg = FakeTelegram({"@friend": (SimpleNamespace(first_name="Friend", username="friend", id=5, bot=False), [(1, "hi")])})
+    assert run_async(run.check_whatsapp(tg, State(), Config(), JobStore(password="pw"))) == 0
+    assert run_async(run.check_whatsapp(tg, State(), Config(whatsapp_inbox=""), JobStore(password="pw"))) == 0
