@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import ResumeDoc, { DEFAULT_OPTIONS, type ResumeOptions, type ResumeTemplate } from "@/components/ResumeDoc";
+import AtsCheck from "@/components/AtsCheck";
+import ResumeDoc, { BASE_PT, DEFAULT_OPTIONS, TRIM_STEPS, density, type ResumeOptions, type ResumeTemplate } from "@/components/ResumeDoc";
+import { atsReport, fitNotes, sheetText, type Fit } from "@/lib/atsCheck";
+import { parseResume, type ParsedResume } from "@/lib/resumeParse";
 import { fetchJobs, jobTitle, type Job } from "@/lib/jobs";
 import { parseJobCached } from "@/lib/extract";
 import { matchKeywords } from "@/lib/keywords";
-import { isProfileStarted, lines, loadProfile, saveProfile, skillList, type Profile } from "@/lib/profile";
+import { isProfileStarted, loadProfile, saveProfile, skillList, type Profile } from "@/lib/profile";
 import { loadJSON, saveJSON } from "@/lib/store";
 
 const ACCENTS = ["#7c3aed", "#db2777", "#2563eb", "#059669", "#ea580c", "#111111"];
@@ -18,6 +21,7 @@ const TEMPLATES: { id: ResumeTemplate; label: string; hint: string }[] = [
   { id: "compact", label: "Compact", hint: "Smaller, fits more on one page" },
 ];
 const SHEET_PX = 793.7; // 210mm
+const PAGE_PX = (296 * 96) / 25.4 - 3; // the printed sheet is 296mm tall; keep a little room for print rounding
 
 const profileText = (p: Profile) =>
   [p.headline, p.summary, p.skills, p.degree, ...p.experience.flatMap((x) => [x.role, x.bullets]), ...p.projects.flatMap((x) => [x.name, x.tech, x.bullets]), p.achievements, p.certifications].join("\n");
@@ -31,10 +35,16 @@ function ResumeBuilder() {
   const [jobId, setJobId] = useState(params.get("job") ?? "");
   const [scale, setScale] = useState(1);
   const [mounted, setMounted] = useState(false);
+  const [fontsReady, setFontsReady] = useState(false);
+  const [trial, setTrial] = useState({ sig: "", level: 0 }); // which trim step the hidden copy is trying
+  const [fit, setFit] = useState<Fit & { sig: string }>({ sig: "", level: 0, t: 0, overflow: false, textPt: 10.2 });
+  const [parsed, setParsed] = useState<ParsedResume | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const measureBox = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    document.fonts?.ready.then(() => setFontsReady(true));
     setP(loadProfile());
     setO({ ...DEFAULT_OPTIONS, ...loadJSON<Partial<ResumeOptions>>("resume_opts", {}) });
     const manual = loadJSON<Job[]>("jobs_manual", []);
@@ -71,6 +81,51 @@ function ResumeBuilder() {
     const hit = (s: string) => matchKeywords(job!.text, s).matched.length > 0; // alias-aware: "Data Structures" counts for "DSA"
     return [...all.filter(hit), ...all.filter((s) => !hit(s))];
   }, [p, match, job]);
+
+  // Always one page: tighten spacing, then text (down to 8.6pt), and only then show fewer points/sections.
+  const sig = useMemo(() => JSON.stringify([p, o, skills, fontsReady]), [p, o, skills, fontsReady]);
+  const level = trial.sig === sig ? trial.level : 0;
+  useLayoutEffect(() => {
+    const el = measureBox.current?.querySelector<HTMLElement>("[data-resume-sheet]");
+    if (!el || !p) return;
+    const apply = (t: number) => {
+      const d = density(t, o.template);
+      el.style.setProperty("--s", String(d.s));
+      el.style.setProperty("--k", String(d.k));
+      return el.getBoundingClientRect().height <= PAGE_PX;
+    };
+    const last = level >= TRIM_STEPS.length - 1;
+    if (!apply(1) && !last) {
+      setTrial({ sig, level: level + 1 }); // still too long at the smallest size: show less, measure again
+      return;
+    }
+    let t = 0;
+    if (!apply(0)) {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        if (apply(mid)) hi = mid;
+        else lo = mid;
+      }
+      t = hi;
+    }
+    const overflow = !apply(t);
+    setFit({ sig, level, t, overflow, textPt: BASE_PT[o.template] * density(t, o.template).k });
+    try {
+      setParsed(parseResume(sheetText(el))); // read it back like an ATS
+    } catch {
+      setParsed(null);
+    }
+  }, [sig, level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const limits = TRIM_STEPS[fit.level] ?? TRIM_STEPS[0];
+  const dens = density(fit.t, o.template);
+  const report = useMemo(
+    () => (p ? atsReport({ p, o, limits, fit, parsed, skills, jobScore: match?.score }) : null),
+    [p, o, limits, fit, parsed, skills, match],
+  );
+  const notes = p ? fitNotes(p, o, limits, fit) : [];
 
   const addSkill = (k: string) => {
     if (!p) return;
@@ -157,22 +212,28 @@ function ResumeBuilder() {
             ))}
           </div>
 
+          {report && <AtsCheck score={report.score} groups={report.groups} />}
+
           <p className="px-1 text-xs text-white/90">Download PDF opens your browser&apos;s print window: choose <b>Save as PDF</b>, paper <b>A4</b>, and turn off <b>Headers and footers</b>.</p>
         </aside>
 
         <div ref={box} className="min-w-0">
           <div style={{ height: `calc(297mm * ${scale})` }} className="overflow-hidden">
             <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: "210mm" }} className="shadow-2xl shadow-violet-900/30">
-              <ResumeDoc p={p} o={o} skills={skills} />
+              <ResumeDoc p={p} o={o} skills={skills} limits={limits} fit={dens} />
             </div>
           </div>
-          {lines(p.achievements).length + p.projects.length + p.experience.length > 9 && (
-            <p className="mt-2 text-xs font-semibold text-white/90">Long profile: if it spills onto a second page, try the Compact template or hide a section.</p>
-          )}
+          <p className="mt-2 text-xs font-semibold text-white/90" data-testid="fit-status">
+            {fit.overflow ? "⚠ Too long for one page even at the smallest size: shorten your points on My profile." : notes.length ? `✓ One page. To fit: ${notes.join(", ")}.` : `✓ One page, text ${fit.textPt.toFixed(1)}pt.`}
+          </p>
         </div>
       </div>
 
-      {mounted && createPortal(<div id="print-root"><ResumeDoc p={p} o={o} skills={skills} /></div>, document.body)}
+      {/* hidden copy at full width, used to measure height and to read the text back like an ATS */}
+      <div ref={measureBox} aria-hidden="true" style={{ position: "fixed", left: -10000, top: 0, visibility: "hidden", pointerEvents: "none" }}>
+        <ResumeDoc p={p} o={o} skills={skills} limits={TRIM_STEPS[level]} measure />
+      </div>
+      {mounted && createPortal(<div id="print-root"><ResumeDoc p={p} o={o} skills={skills} limits={limits} fit={dens} page /></div>, document.body)}
     </div>
   );
 }
