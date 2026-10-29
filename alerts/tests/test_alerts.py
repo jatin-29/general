@@ -458,3 +458,41 @@ def test_whatsapp_inbox_absent_or_off_is_quiet():
     tg = FakeTelegram({"@friend": (SimpleNamespace(first_name="Friend", username="friend", id=5, bot=False), [(1, "hi")])})
     assert run_async(run.check_whatsapp(tg, State(), Config(), JobStore(password="pw"))) == 0
     assert run_async(run.check_whatsapp(tg, State(), Config(whatsapp_inbox=""), JobStore(password="pw"))) == 0
+
+
+def test_whatsapp_job_detection_is_not_too_strict():
+    from core import is_wa_job
+
+    cfg = load_config(Path(run.__file__).parent / "config.toml")
+    jobs = [
+        "Amazon is hiring SDE interns for 2026 batch, apply soon",  # no link, but clearly a job
+        "Deloitte Off Campus Drive 2026 | Analyst | Freshers | Location: Bangalore",
+        "Infosys hiring: Role - Systems Engineer, CTC 3.6 LPA, Eligibility: B.Tech 2025/26",
+        "Swiggy Internship. Stipend 40k/month. Apply: https://careers.swiggy.com/x",
+        "Walk-in interview for Data Analyst trainee, Noida, 10am-4pm",
+        "Send your CV to hr@kappa.in for the content writer opening",
+    ]
+    chat = [
+        "are you applying for this job or not, tell me today itself please beta",
+        "Any update on the Amazon results?",
+        "thanks for sharing bro, very helpful",
+        "Good morning everyone, have a great day",
+        "Is this job remote?",
+    ]
+    for t in jobs:
+        assert is_wa_job(t, cfg), t
+    for t in chat:
+        assert not is_wa_job(t, cfg), t
+    # a group that already posted jobs gets the benefit of the doubt on shorter posts
+    assert not is_wa_job("TCS hiring freshers, batch 2025", cfg) and is_wa_job("TCS hiring freshers, batch 2025", cfg, job_group=True)
+
+
+def test_whatsapp_rescan_brings_back_skipped_posts():
+    store, state = JobStore(password="pw"), State()
+    bot = SimpleNamespace(first_name="My jobs bot", username="my_jobs_bot", id=77, bot=True)
+    rows = [(1, "WA: Jobs || ~ A: Amazon is hiring SDE interns for 2026 batch, apply soon")]
+    tg = FakeTelegram({"@my_jobs_bot": (bot, rows)})
+    state.whatsapp = 1  # already read (and skipped by the old, stricter rule)
+    assert run_async(run.check_whatsapp(tg, state, Config(), store)) == 0
+    assert run_async(run.check_whatsapp(tg, state, Config(), store, rescan=10)) == 1
+    assert store.jobs[0]["source"] == "WhatsApp · Jobs" and state.wa_groups == ["Jobs"]

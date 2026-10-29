@@ -116,6 +116,7 @@ class State:
         self.seen: list[str] = d.get("seen", [])
         self.channels: dict[str, str] = d.get("channels", {})  # youtube handle -> channel id
         self.whatsapp: int = d.get("whatsapp", 0)  # last message id read from the WhatsApp inbox chat
+        self.wa_groups: list[str] = d.get("wa_groups", [])  # WhatsApp chats that have posted jobs
 
     @classmethod
     def load(cls, path: str | Path) -> "State":
@@ -164,15 +165,34 @@ def parse_wa(message: str) -> tuple[str, str] | None:
     return group, text
 
 
-def is_wa_job(text: str, cfg: "Config") -> bool:
-    """WhatsApp also carries chat ("are you applying for this job?"): a post needs an apply link or email
-    plus a job word, or two different job words and some length."""
+# Words that show up in job posts (and rarely together in chat).
+WA_WORDS = re.compile(
+    r"\b(hiring|hire|hires|intern|interns|internships?|job|jobs|openings?|vacanc(?:y|ies)|roles?|positions?|apply|ctc|lpa|"
+    r"stipend|salary|package|eligib\w*|batch(?:es)?|freshers?|experience|graduates?|b\.?\s?tech|mba|mca|bca|location|"
+    r"remote|wfh|work from home|on-?site|hybrid|deadline|last date|registration|register|drive|walk-?in|recruit\w*|"
+    r"referral|jd|engineer|developer|analyst|trainee|associate|executive|sde|qualifications?|skills|off ?campus|"
+    r"on ?campus|full[- ]time|part[- ]time|careers?|interviews?|cv|resume)\b",
+    re.I,
+)
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+
+
+def wa_signals(text: str, cfg: "Config") -> tuple[int, bool]:
+    """(how many different job words, has an apply link or email)."""
+    t = text.lower()
+    words = {m.group(0).lower() for m in WA_WORDS.finditer(t)} | {w for w in cfg.include if _has(t, w)}
+    return len(words), bool(job_links(text)) or EMAIL.search(text) is not None
+
+
+def is_wa_job(text: str, cfg: "Config", job_group: bool = False) -> bool:
+    """WhatsApp also carries chat ("are you applying for this job?"). A job post has an apply link or email and a
+    job word, or several job words. Groups that already posted jobs need a little less."""
     if is_excluded(text, cfg.exclude):
         return False
-    t = text.lower()
-    words = sum(1 for w in cfg.include if _has(t, w))
-    contact = bool(job_links(text)) or re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", text) is not None
-    return (contact and words >= 1 and len(text) >= 40) or (words >= 2 and len(text) >= 60)
+    words, contact = wa_signals(text, cfg)
+    if contact and words >= 1 and len(text) >= 30:
+        return True
+    return words >= 4 or (words >= 3 and (job_group or len(text) >= 120))
 
 
 # ---------------------------------------------------------------- YouTube feed

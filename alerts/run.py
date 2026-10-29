@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
     Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
-    parse_wa,
+    parse_wa, wa_signals,
 )
 
 log = logging.getLogger("alerts")
@@ -288,27 +288,34 @@ async def find_whatsapp_inbox(client, cfg: Config):
     return None
 
 
-async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | None = None) -> int:
+async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | None = None, rescan: int = 0) -> int:
     """Job posts from WhatsApp groups, forwarded by MacroDroid on your phone. Returns how many were new."""
     inbox = await find_whatsapp_inbox(client, cfg)
     if inbox is None:
         log.info("whatsapp: no inbox chat yet (set up MacroDroid to send 'WA: …' messages to your bot)")
         return 0
-    if state.whatsapp:
+    if rescan:  # one-off: look again at the latest N (stored ones are skipped as duplicates)
+        msgs = [m async for m in client.iter_messages(inbox, limit=rescan)]
+    elif state.whatsapp:
         msgs = [m async for m in client.iter_messages(inbox, min_id=state.whatsapp, limit=500)]
     else:  # first time: the recent ones
         msgs = [m async for m in client.iter_messages(inbox, limit=50)]
     msgs.sort(key=lambda m: m.id)
     seen = {"added": 0, "noise": 0, "not_job": 0, "dup": 0}
+    skipped = []  # length/score only: the repo's logs are public, so never the text
     new = 0
     for m in msgs:
         parsed = parse_wa(getattr(m, "message", None) or "")
         if not parsed:
             seen["noise"] += 1
-        elif not is_wa_job(parsed[1], cfg):
+        elif not is_wa_job(parsed[1], cfg, job_group=parsed[0] in state.wa_groups):
             seen["not_job"] += 1
+            words, contact = wa_signals(parsed[1], cfg)
+            skipped.append(f"{len(parsed[1])}c/{words}w{'+link' if contact else ''}")
         else:
             group, text = parsed
+            if group not in state.wa_groups:
+                state.wa_groups = (state.wa_groups + [group])[-100:]
             fp = fingerprint(text)
             if state.was_seen(fp) or (store is not None and fp in store.deleted):
                 seen["dup"] += 1
@@ -322,6 +329,8 @@ async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | No
         "whatsapp: looked at %d message(s): %d new job(s) (%d added to website), %d not jobs, %d notifications skipped, %d duplicates",
         len(msgs), new, seen["added"], seen["not_job"], seen["noise"], seen["dup"],
     )
+    if skipped:
+        log.info("whatsapp: skipped as not jobs (length/job words): %s", ", ".join(skipped))
     return new
 
 
@@ -383,7 +392,8 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
                 log.error("telegram %s failed: %s", ref, e)
         if client and cfg.whatsapp_inbox:
             try:
-                total += await check_whatsapp(client, state, cfg, store)
+                wa_scope = {c.strip().lower() for c in env.get("RESCAN_CHATS", "").split(",") if c.strip()}
+                total += await check_whatsapp(client, state, cfg, store, rescan if not wa_scope or "whatsapp" in wa_scope else 0)
             except Exception as e:
                 errors += 1
                 log.error("whatsapp inbox failed: %s", e)
