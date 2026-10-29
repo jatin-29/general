@@ -6,6 +6,7 @@ import { emptyProfile, loadProfile, saveProfile, skillList, type Answer, type Ed
 import { DEFAULT_TEMPLATES, loadTemplates, saveTemplates, type Kind, type Templates, type Tone } from "@/lib/templates";
 import { loadJSON, saveJSON } from "@/lib/store";
 import { useToast } from "@/components/Toast";
+import ResumeImport from "@/components/ResumeImport";
 
 const lbl = "block space-y-1 text-sm font-semibold";
 const inp = "input font-normal";
@@ -194,6 +195,8 @@ export default function ProfilePage() {
           <Link href="/resume" className="btn-pill">Build my resume →</Link>
         </div>
       </div>
+
+      <ResumeImport profile={p} onApply={update} />
 
       <Section title="About you">
         <div className="grid gap-3 sm:grid-cols-2">

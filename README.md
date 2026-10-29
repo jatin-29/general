@@ -25,6 +25,15 @@ On first poll a Telegram source backfills its latest 50 messages; afterwards onl
 
 **YouTube note:** YouTube's RSS feed sometimes returns 404 to server/datacenter IPs (it did in the environment this was built in). If a channel fails, add a free YouTube Data API key in Settings and the collector uses the API instead.
 
+## My profile: fill from your resume
+
+*My profile → Fill from my resume* reads a PDF or Word (.docx) resume in the browser (pdf.js for PDFs, a small
+built-in unzip for .docx; the file is never uploaded) and finds your name, contact details and links, college,
+degree, batch and CGPA, Class XII / X marks, internships, projects, skills, achievements and certifications by
+their section headings. No AI: a review dialog shows everything it found, editable, and only what you tick is
+saved. Scanned (image-only) PDFs have no text to read. Test: build the frontend with
+`NEXT_PUBLIC_BASE_PATH=/general`, then `node frontend/test/resume-import.cjs`.
+
 ## Chrome extension: autofill job forms
 
 `extension/` is a Chrome extension (Manifest V3) that fills job application forms with the details on the
