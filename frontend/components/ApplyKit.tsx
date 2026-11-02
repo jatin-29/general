@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import { isProfileStarted, loadProfile, type Profile } from "@/lib/profile";
 import {
-  DEFAULT_TEMPLATES, fill, findEmails, gmailUrl, linkedinPeople, loadTemplates, mailtoUrl, values, whatsappUrl,
+  DEFAULT_TEMPLATES, SCENARIOS, fill, findEmails, gmailUrl, linkedinPeople, loadTemplates, mailtoUrl, values, whatsappUrl,
   type Kind, type Templates, type Tone,
 } from "@/lib/templates";
 import { STATUSES, withStatus, type Status, type Track } from "@/lib/tracker";
@@ -37,6 +37,7 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
   const [to, setTo] = useState(emails[0] ?? "");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [scenario, setScenario] = useState("standard"); // a ready-made situation, or your own templates
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -54,10 +55,10 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
   useEffect(() => {
     if (!profile || tab === "track") return;
     const v = values(profile, { company, role, contact, appliedOn: track?.appliedOn ?? "" });
-    const t = templates[tab][tone];
+    const t = SCENARIOS[tab].find((x) => x.id === scenario)?.t ?? templates[tab][tone];
     setSubject(fill(t.subject, v));
     setBody(fill(t.body, v));
-  }, [profile, templates, tab, tone, contact, company, role, track?.appliedOn]);
+  }, [profile, templates, tab, tone, contact, company, role, track?.appliedOn, scenario]);
 
   const pickTone = (t: Tone) => {
     setTone(t);
@@ -102,7 +103,7 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
 
         <div className="mb-4 flex flex-wrap gap-1.5" role="tablist">
           {TABS.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setScenario("standard"); }}
               className={`rounded-full px-3.5 py-1.5 text-sm font-bold transition ${tab === t.id ? "bg-brand-600 text-white shadow" : "bg-slate-500/10 hover:bg-slate-500/20"}`}>
               {t.label}
             </button>
@@ -128,11 +129,17 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
           </div>
         ) : (
           <div className="space-y-3">
+            <label className={label}>Scenario
+              <select className="input font-normal" value={scenario} onChange={(e) => setScenario(e.target.value)} aria-label="Scenario">
+                <option value="standard">Standard (your template, {tone})</option>
+                {SCENARIOS[tab].map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+              </select>
+            </label>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className={label}>Company<input className="input font-normal" value={company} onChange={(e) => setCompany(e.target.value)} /></label>
               <label className={label}>Role<input className="input font-normal" value={role} onChange={(e) => setRole(e.target.value)} /></label>
               <label className={label}>Tone
-                <select className="input font-normal" value={tone} onChange={(e) => pickTone(e.target.value as Tone)}>
+                <select className="input font-normal disabled:opacity-50" value={tone} disabled={scenario !== "standard"} title={scenario !== "standard" ? "Tone applies to the standard template" : undefined} onChange={(e) => pickTone(e.target.value as Tone)}>
                   <option value="formal">Formal</option><option value="friendly">Friendly</option><option value="short">Short</option>
                 </select>
               </label>

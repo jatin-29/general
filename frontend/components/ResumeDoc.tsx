@@ -1,6 +1,7 @@
+import { Fragment } from "react";
 import { asUrl, lines, skillList, type Profile } from "@/lib/profile";
 
-export type ResumeTemplate = "classic" | "modern" | "compact";
+export type ResumeTemplate = "classic" | "modern" | "compact" | "jake" | "harvard";
 export interface ResumeOptions {
   template: ResumeTemplate;
   accent: string;
@@ -35,7 +36,7 @@ export const TRIM_STEPS: Limits[] = [
 
 /** Squeeze: s = spacing (1 → 0.6), k = text size (1 → MIN_TEXT_PT / base). */
 export interface Density { s: number; k: number }
-export const BASE_PT = { modern: 10.2, classic: 10.2, compact: 9.4 } as const;
+export const BASE_PT = { modern: 10.2, classic: 10.2, compact: 9.4, jake: 10.6, harvard: 10.8 } as const;
 export const MIN_TEXT_PT = 8.6;
 export function density(t: number, template: ResumeTemplate): Density {
   const kMin = Math.min(1, MIN_TEXT_PT / BASE_PT[template]);
@@ -83,6 +84,11 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
   const compact = o.template === "compact";
   const modern = o.template === "modern";
   const accent = modern ? o.accent : "#111111";
+  // Jake Ryan / Harvard: the classic serif LaTeX-style resumes (one column, so still ATS-friendly)
+  const jake = o.template === "jake";
+  const harvard = o.template === "harvard";
+  const serifT = jake || harvard;
+  const font = serifT ? '"Times New Roman", Times, Georgia, serif' : "Inter Variable, Arial, Helvetica, sans-serif";
   const base = BASE_PT[o.template];
   const skillItems = skills ?? skillList(p);
   const v = visibleContent(p, o, limits);
@@ -95,7 +101,12 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
     p.portfolio && { text: pretty(asUrl(p.portfolio)), href: asUrl(p.portfolio) },
   ].filter(Boolean) as { text: string; href?: string }[];
 
-  const H = ({ children }: { children: React.ReactNode }) => (
+  const H = ({ children }: { children: React.ReactNode }) => serifT ? (
+    <h2 style={{ fontFamily: font, borderBottom: "0.8px solid #111", margin: `${sp(8)} 0 ${sp(3)}`, paddingBottom: "1pt", color: "#111", lineHeight: 1.2,
+      ...(jake ? { fontSize: tx(12.5), fontWeight: 400, fontVariant: "small-caps", letterSpacing: "0.02em" } : { fontSize: tx(11), fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }) }}>
+      {children}
+    </h2>
+  ) : (
     <h2 style={{ color: accent, borderBottom: `1.2px solid ${modern ? accent : "#222"}`, fontSize: tx(compact ? 10 : 10.8), letterSpacing: "0.06em", margin: `${sp(compact ? 7 : 10)} 0 ${sp(compact ? 3 : 4)}`, paddingBottom: "1.5pt", fontWeight: 800, textTransform: "uppercase", fontFamily: "Inter Variable, Arial, sans-serif" }}>
       {children}
     </h2>
@@ -113,6 +124,59 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
     </div>
   );
 
+  const education = (p.college || p.education.length > 0) && (
+    <>
+      <H>Education</H>
+      {p.college && (
+        <div style={{ breakInside: "avoid", marginBottom: sp(3) }}>
+          <Row left={<b>{p.college}</b>} right={p.batch && `Graduating ${p.batch}`} />
+          <Row left={serifT ? <i>{p.degree}</i> : <span>{p.degree}</span>} right={p.cgpa && `CGPA: ${p.cgpa}`} />
+        </div>
+      )}
+      {p.education.filter((e) => e.school || e.degree).map((e, i) => (
+        <div key={i} style={{ breakInside: "avoid", marginBottom: sp(2) }}>
+          <Row left={<><b>{e.degree}</b>{e.school && `, ${e.school}`}</>} right={[e.score, e.year].filter(Boolean).join(" · ")} />
+        </div>
+      ))}
+    </>
+  );
+  const skillsBlock = skillItems.length > 0 && (<><H>{jake ? "Technical Skills" : "Skills"}</H><p style={{ margin: 0 }}>{skillItems.join(", ")}</p></>);
+  const experience = v.experience.length > 0 && (
+    <>
+      <H>Experience</H>
+      {v.experience.map((x, i) => (
+        <div key={i} style={{ breakInside: "avoid", marginBottom: sp(5) }}>
+          {serifT ? (
+            <>
+              <Row left={<b>{x.company || x.role}</b>} right={x.location} />
+              {x.company && <Row left={<i>{x.role}</i>} right={[x.start, x.end].filter(Boolean).join(" – ")} />}
+            </>
+          ) : (
+            <>
+              <Row left={<><b>{x.role}</b>{x.company && <>, {x.company}</>}</>} right={[x.start, x.end].filter(Boolean).join(" – ")} />
+              {x.location && <div style={{ color: "#555", fontSize: "0.92em" }}>{x.location}</div>}
+            </>
+          )}
+          <Bullets items={x.points} />
+        </div>
+      ))}
+    </>
+  );
+  const projects = v.projects.length > 0 && (
+    <>
+      <H>Projects</H>
+      {v.projects.map((x, i) => (
+        <div key={i} style={{ breakInside: "avoid", marginBottom: sp(5) }}>
+          <Row
+            left={<><b>{x.name}</b>{x.tech && <span style={{ color: "#444" }}> | {serifT ? <i>{x.tech}</i> : x.tech}</span>}</>}
+            right={x.link && <a href={asUrl(x.link)} style={{ color: "inherit" }}>{pretty(asUrl(x.link))}</a>}
+          />
+          <Bullets items={x.points} />
+        </div>
+      ))}
+    </>
+  );
+
   return (
     <article
       id={id}
@@ -123,12 +187,12 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
         ...(measure ? {} : page ? { height: "296mm", overflow: "hidden" } : { minHeight: "297mm" }),
         padding: `${sp(compact ? 10 : 13, "mm")} calc(${compact ? 12 : 15}mm * (0.6 + 0.4 * var(--s)))`,
         fontSize: tx(base), lineHeight: "calc(1.25 + 0.13 * var(--s))",
-        fontFamily: "Inter Variable, Arial, Helvetica, sans-serif", fontVariantLigatures: "none", // "fi" stays two letters for ATS
+        fontFamily: font, fontVariantLigatures: "none", // "fi" stays two letters for ATS
         borderTop: modern ? `5pt solid ${accent}` : undefined,
       }}
     >
       <header style={{ textAlign: modern ? "left" : "center", marginBottom: sp(4) }}>
-        <h1 style={{ fontFamily: "Inter Variable, Arial, sans-serif", fontSize: tx(compact ? 19 : 22), fontWeight: 800, color: modern ? accent : "#111", margin: 0, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{p.name || "Your Name"}</h1>
+        <h1 style={{ fontFamily: serifT ? font : "Inter Variable, Arial, sans-serif", fontSize: tx(jake ? 25 : harvard ? 20 : compact ? 19 : 22), fontWeight: serifT ? 700 : 800, color: modern ? accent : "#111", margin: 0, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{p.name || "Your Name"}</h1>
         {p.headline && <p style={{ margin: `${sp(1)} 0 0`, fontWeight: 600, color: "#333" }}>{p.headline}</p>}
         {contact.length > 0 && (
           <p style={{ margin: `${sp(3)} 0 0`, color: "#333", fontSize: "0.93em" }}>
@@ -144,52 +208,7 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
 
       {v.summary && (<><H>Summary</H><p style={{ margin: 0 }}>{v.summary}</p></>)}
 
-      {(p.college || p.education.length > 0) && (
-        <>
-          <H>Education</H>
-          {p.college && (
-            <div style={{ breakInside: "avoid", marginBottom: sp(3) }}>
-              <Row left={<b>{p.college}</b>} right={p.batch && `Graduating ${p.batch}`} />
-              <Row left={<span>{p.degree}</span>} right={p.cgpa && `CGPA: ${p.cgpa}`} />
-            </div>
-          )}
-          {p.education.filter((e) => e.school || e.degree).map((e, i) => (
-            <div key={i} style={{ breakInside: "avoid", marginBottom: sp(2) }}>
-              <Row left={<><b>{e.degree}</b>{e.school && `, ${e.school}`}</>} right={[e.score, e.year].filter(Boolean).join(" · ")} />
-            </div>
-          ))}
-        </>
-      )}
-
-      {skillItems.length > 0 && (<><H>Skills</H><p style={{ margin: 0 }}>{skillItems.join(", ")}</p></>)}
-
-      {v.experience.length > 0 && (
-        <>
-          <H>Experience</H>
-          {v.experience.map((x, i) => (
-            <div key={i} style={{ breakInside: "avoid", marginBottom: sp(5) }}>
-              <Row left={<><b>{x.role}</b>{x.company && <>, {x.company}</>}</>} right={[x.start, x.end].filter(Boolean).join(" – ")} />
-              {x.location && <div style={{ color: "#555", fontSize: "0.92em" }}>{x.location}</div>}
-              <Bullets items={x.points} />
-            </div>
-          ))}
-        </>
-      )}
-
-      {v.projects.length > 0 && (
-        <>
-          <H>Projects</H>
-          {v.projects.map((x, i) => (
-            <div key={i} style={{ breakInside: "avoid", marginBottom: sp(5) }}>
-              <Row
-                left={<><b>{x.name}</b>{x.tech && <span style={{ color: "#444" }}> | {x.tech}</span>}</>}
-                right={x.link && <a href={asUrl(x.link)} style={{ color: "inherit" }}>{pretty(asUrl(x.link))}</a>}
-              />
-              <Bullets items={x.points} />
-            </div>
-          ))}
-        </>
-      )}
+      {(serifT ? [education, experience, projects, skillsBlock] : [education, skillsBlock, experience, projects]).map((block, i) => <Fragment key={i}>{block}</Fragment>)}
 
       {v.achievements.length > 0 && (<><H>Achievements</H><Bullets items={v.achievements} /></>)}
       {v.certifications.length > 0 && (<><H>Certifications</H><Bullets items={v.certifications} /></>)}

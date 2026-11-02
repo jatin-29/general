@@ -44,9 +44,9 @@ const huge = { ...long, experience: Array.from({ length: 8 }, (_, i) => ({ ...lo
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
 
-  async function open(profile) {
+  async function open(profile, template) {
     await page.goto(`${BASE}/resume/`);
-    await page.evaluate((p) => { localStorage.setItem("profile_v1", JSON.stringify(p)); localStorage.removeItem("resume_opts"); }, profile);
+    await page.evaluate(([p, t]) => { localStorage.setItem("profile_v1", JSON.stringify(p)); t ? localStorage.setItem("resume_opts", JSON.stringify({ template: t })) : localStorage.removeItem("resume_opts"); }, [profile, template]);
     await page.reload();
     await page.getByTestId("ats-score").waitFor();
     await page.waitForTimeout(800);
@@ -82,6 +82,15 @@ const huge = { ...long, experience: Array.from({ length: 8 }, (_, i) => ({ ...lo
   r = await open(projects);
   assert.ok(!r.checks.includes("start with an action verb"), r.checks);
   console.log("  ✓ \"Collects…\", \"Encrypted…\" count as action verbs");
+
+  for (const t of ["jake", "harvard"]) {
+    r = await open(long, t);
+    assert.equal(pages(r.pdf), 1, t);
+    await page.getByText("Show every check").click();
+    const checks = await page.getByLabel("ATS check").innerText();
+    for (const x of ["Name: Ananya Gupta", "Email: ananya@example.com", "Fits on one page"]) assert.ok(checks.includes(x), `${t}: missing "${x}"`);
+    console.log(`  ✓ ${t} template: one page, read back by the ATS check (score ${r.score})`);
+  }
 
   assert.deepEqual(errors, []);
   await browser.close();

@@ -19,6 +19,8 @@ const TEMPLATES: { id: ResumeTemplate; label: string; hint: string }[] = [
   { id: "modern", label: "Modern", hint: "Coloured name and headings" },
   { id: "classic", label: "Classic", hint: "Black and white, centred" },
   { id: "compact", label: "Compact", hint: "Smaller, fits more on one page" },
+  { id: "jake", label: "Jake Ryan", hint: "The popular LaTeX one: serif, small-caps headings" },
+  { id: "harvard", label: "Harvard", hint: "Classic serif, education first, skills last" },
 ];
 const SHEET_PX = 793.7; // 210mm
 const PAGE_PX = (296 * 96) / 25.4 - 3; // the printed sheet is 296mm tall; keep a little room for print rounding
