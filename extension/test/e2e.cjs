@@ -115,6 +115,11 @@ list.addEventListener("click", (e) => {
 });`);
 
 (async () => {
+  // the site's "update available" notice compares with this number
+  const version = JSON.parse(fs.readFileSync(path.join(EXT, "manifest.json"), "utf8")).version;
+  const siteKnows = fs.readFileSync(path.join(EXT, "../frontend/app/profile/page.tsx"), "utf8").match(/EXTENSION_VERSION = "([\d.]+)"/)[1];
+  assert.equal(siteKnows, version, "update EXTENSION_VERSION in frontend/app/profile/page.tsx");
+
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oh-ext-"));
   const ctx = await chromium.launchPersistentContext(dir, {
     channel: "chromium",

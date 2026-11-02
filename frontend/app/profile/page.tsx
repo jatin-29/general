@@ -54,6 +54,13 @@ function Choice({ label, value, onChange, options }: { label: string; value: str
 }
 
 /** Install steps, and whether the extension is running in this browser (it marks the page when it is). */
+const EXTENSION_VERSION = "1.1.0"; // keep in step with extension/manifest.json
+const older = (a: string, b: string) => {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  return false;
+};
+
 function ExtensionCard() {
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
@@ -70,7 +77,11 @@ function ExtensionCard() {
   return (
     <>
       {version ? (
-        <p className="rounded-2xl bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Connected (version {version}). Your details on this page go to the extension automatically.</p>
+        older(version, EXTENSION_VERSION) ? (
+          <p className="rounded-2xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">Update available: you have version {version}, the new one is {EXTENSION_VERSION}. Download it below, replace the folder, and press ↻ on the extension in chrome://extensions.</p>
+        ) : (
+          <p className="rounded-2xl bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">✓ Connected (version {version}). Your details on this page go to the extension automatically.</p>
+        )
       ) : (
         <p className="rounded-2xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">Not installed in this browser yet.</p>
       )}

@@ -12,6 +12,7 @@ import { DONE_APPLYING, STATUSES, followUpBadge, loadTracker, saveTracker, withS
 import { useToast } from "./Toast";
 import JobCalendar from "./JobCalendar";
 import { dayKey, dayLabel, jobDay, jobTime } from "@/lib/days";
+import { isFresherJob } from "@/lib/fresher";
 import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
 const PAGE = 24;
@@ -101,6 +102,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
           <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
             <span className="rounded-full bg-sky-100 px-2.5 py-0.5 font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
             {isNew && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">New</span>}
+            {isFresherJob(job) && <span className="rounded-full bg-brand-100 px-2.5 py-0.5 font-bold text-brand-800 dark:bg-brand-950 dark:text-brand-300">🎓 Freshers</span>}
             {badge && <span className={`rounded-full px-2.5 py-0.5 font-bold ${TONE[badge.tone]} ${badge.tone === "urgent" ? "pulse-ring" : ""}`}>{badge.label}</span>}
             {fu && <span className={`rounded-full px-2.5 py-0.5 font-bold ${fu.urgent ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>⏰ {fu.label}</span>}
             <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
@@ -174,6 +176,12 @@ export default function JobsFeed() {
   const [today] = useState(() => dayKey(new Date()));
   const [day, setDay] = useState(today); // the day being shown ("2026-11-01"); "" = every date
   const [calOpen, setCalOpen] = useState(false); // phones: calendar under the day bar
+  const [freshers, setFreshers] = useState(false); // only fresher-friendly jobs (remembered)
+  useEffect(() => setFreshers(load("freshers_only", false)), []);
+  const toggleFreshers = () => {
+    setFreshers(!freshers);
+    save("freshers_only", !freshers);
+  };
   const [tracker, setTrackerState] = useState<Tracker>({});
   const [kitJob, setKitJob] = useState<Job | null>(null);
   const [lastVisit, setLastVisit] = useState<number>(0);
@@ -324,8 +332,10 @@ export default function JobsFeed() {
   };
 
   // Jobs you were rejected from leave the list and the counts.
-  const rejected = useMemo(() => all.filter((j) => tracker[j.id]?.status === "rejected"), [all, tracker]);
-  const open = useMemo(() => all.filter((j) => tracker[j.id]?.status !== "rejected"), [all, tracker]);
+  // "Freshers only" narrows everything: counts, calendar, day bar and list.
+  const pool = useMemo(() => (freshers ? all.filter(isFresherJob) : all), [all, freshers]);
+  const rejected = useMemo(() => pool.filter((j) => tracker[j.id]?.status === "rejected"), [pool, tracker]);
+  const open = useMemo(() => pool.filter((j) => tracker[j.id]?.status !== "rejected"), [pool, tracker]);
   const counts = useMemo(
     () => ({ total: open.length, fresh: open.filter(isNewJob).length, soon: open.filter(isSoon).length, mine: open.filter((j) => statusOf(j.id)).length }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,7 +373,7 @@ export default function JobsFeed() {
     setCalOpen(false);
   };
 
-  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected, shownDay]);
+  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected, shownDay, freshers]);
   useEffect(() => {
     if (showRejected && rejected.length === 0) setShowRejected(false);
   }, [showRejected, rejected.length]);
@@ -427,7 +437,7 @@ export default function JobsFeed() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <h2 className="font-display on-bg text-3xl font-bold">{showRejected ? "Rejected" : "Latest openings"}</h2>
           <p className="on-bg-muted text-xs font-semibold">
-            {jobs || manual.length ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : ""}
+            {jobs || manual.length ? `${visible.length} ${freshers ? "fresher " : ""}job${visible.length === 1 ? "" : "s"}` : ""}
             {updatedAt ? ` · Updated ${timeAgo(updatedAt)}` : ""} ·{" "}
             <button onClick={() => refresh()} className="underline">Refresh</button>
             {(rejected.length > 0 || showRejected) && (
@@ -443,16 +453,26 @@ export default function JobsFeed() {
 
         <div className="grid gap-5 lg:grid-cols-[1fr_19rem]">
         <div className="min-w-0">
-        <div className="card mb-5 grid gap-3 p-3 sm:grid-cols-[1fr_13rem_auto] sm:items-center">
+        <div className="card mb-5 grid gap-3 p-3 sm:grid-cols-[1fr_12rem_auto] sm:items-center">
           <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="">All sources</option>
             {sources.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap px-1 text-sm font-semibold">
-            <input type="checkbox" className="h-4 w-4" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} />
-            Hide applied
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={toggleFreshers}
+              aria-pressed={freshers}
+              title="Show only jobs for freshers: 0–1 years, trainee, internships, off-campus, batch-wise hiring"
+              className={`rounded-full border px-3.5 py-2 text-sm font-bold transition ${freshers ? "border-transparent bg-brand-600 text-white dark:text-[#1c1410]" : "border-[rgb(var(--border))] bg-[rgb(var(--surface))] hover:border-brand-500"}`}
+            >
+              🎓 Freshers only{freshers ? " ✓" : ""}
+            </button>
+            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap px-1 text-sm font-semibold">
+              <input type="checkbox" className="h-4 w-4" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} />
+              Hide applied
+            </label>
+          </div>
         </div>
 
         {shownDay ? (
@@ -497,7 +517,7 @@ export default function JobsFeed() {
           <div className="grid gap-4 xl:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
         ) : visible.length === 0 && shownDay && filtered.length > 0 ? (
           <div className="card p-10 text-center">
-            <p className="font-display text-xl font-bold">{shownDay === today ? "No new jobs yet today" : `No jobs on ${dayLabel(shownDay)}`}</p>
+            <p className="font-display text-xl font-bold">{shownDay === today ? `No new ${freshers ? "fresher " : ""}jobs yet today` : `No ${freshers ? "fresher " : ""}jobs on ${dayLabel(shownDay)}`}</p>
             <p className="mt-1 text-sm text-slate-500">New posts arrive every 15 minutes.</p>
             {(prevDay ?? nextDay) && (
               <button className="btn-primary mt-4" onClick={() => setDay((prevDay ?? nextDay)!)}>

@@ -429,11 +429,11 @@
     .box { position: fixed; right: 18px; bottom: 18px; z-index: 2147483647; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font: 600 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; }
     .row { display: flex; align-items: center; gap: 4px; }
     .go { border: 0; cursor: pointer; color: #fff; padding: 10px 16px; border-radius: 999px; font: inherit; font-weight: 800;
-          background: linear-gradient(135deg, #ff8fb8, #c26bff 55%, #7c3aed); box-shadow: 0 8px 24px rgba(124, 58, 237, .35); }
+          background: linear-gradient(135deg, #e07a4f, #c2410c 60%, #9a3412); box-shadow: 0 8px 22px rgba(154, 52, 18, .35); }
     .go:hover { filter: brightness(1.06); transform: translateY(-1px); }
     .go:disabled { opacity: .7; cursor: progress; }
     .x { border: 0; cursor: pointer; width: 24px; height: 24px; border-radius: 999px; background: rgba(15, 23, 42, .55); color: #fff; font: inherit; }
-    .msg { max-width: 280px; padding: 10px 12px; border-radius: 14px; background: #fff; color: #1e1b4b; box-shadow: 0 10px 30px rgba(30, 27, 75, .2); }
+    .msg { max-width: 280px; padding: 10px 12px; border-radius: 14px; background: #fffcf7; color: #2b1d12; border: 1px solid #e7dccc; box-shadow: 0 10px 30px rgba(43, 29, 18, .2); }
     .msg b { color: #16a34a; } .msg i { color: #b45309; font-style: normal; }
   `;
   let host = null;
