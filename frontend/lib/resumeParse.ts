@@ -169,6 +169,8 @@ function education(lines: string[]): EduEntry[] {
     const text = g.join("   ");
     const parts = g.flatMap(chunks).map(stripMeta).filter(Boolean);
     let school = parts.find((c) => INSTITUTE.test(c) && !COLLEGE_DEG.test(c)) ?? parts.find((c) => INSTITUTE.test(c)) ?? "";
+    // a college written as initials ("GGSIPU", "DTU"): the first piece that isn't the degree, a board or a label
+    if (!school) school = parts.find((c) => !COLLEGE_DEG.test(c) && !SCHOOL_DEG.test(c) && !BOARD.test(c) && /[A-Za-z]{2,}/.test(c) && !/^(graduating|expected|cgpa|gpa|percentage|score|year)\b/i.test(c)) ?? "";
     let degree = parts.find((c) => c !== school && (COLLEGE_DEG.test(c) || SCHOOL_DEG.test(c))) ?? "";
     if (!degree && school && (COLLEGE_DEG.test(school) || SCHOOL_DEG.test(school))) {
       // "B.Tech in CSE, Delhi Technological University" in one piece

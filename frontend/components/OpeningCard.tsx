@@ -15,7 +15,7 @@ const URGENCY: Record<Urgency, string> = {
 const SOURCE: Record<string, string> = {
   telegram: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
   youtube: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
-  manual: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  manual: "bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300",
 };
 
 export const Pill = ({ className, children }: { className: string; children: React.ReactNode }) => (
@@ -38,11 +38,11 @@ export default function OpeningCard({
             {o.source_type} · {o.source_name}
           </Pill>
           {o.employment_type && (
-            <Pill className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{o.employment_type}</Pill>
+            <Pill className="bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">{o.employment_type}</Pill>
           )}
           <Pill className={URGENCY[badge.urgency]}>{badge.label}</Pill>
         </div>
-        <Link href={`/opening?id=${o.id}`} className="block truncate text-base font-semibold hover:text-indigo-600 dark:hover:text-indigo-400">
+        <Link href={`/opening?id=${o.id}`} className="block truncate text-base font-semibold hover:text-brand-600 dark:hover:text-brand-400">
           {o.role}
         </Link>
         <p className="truncate text-sm text-slate-600 dark:text-slate-400">
@@ -58,7 +58,7 @@ export default function OpeningCard({
             type="checkbox"
             checked={o.applied}
             onChange={() => onToggleApplied(o)}
-            className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+            className="h-4 w-4 rounded border-slate-300 accent-brand-600"
           />
           Applied
         </label>

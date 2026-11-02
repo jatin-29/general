@@ -145,26 +145,26 @@ function ResumeBuilder() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
         <div>
-          <h1 className="font-display text-4xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">Resume builder</h1>
-          <p className="text-sm font-semibold text-white/90">Made from <Link href="/profile" className="underline">your profile</Link>. One page, readable by applicant tracking systems.</p>
+          <h1 className="font-display on-bg text-4xl font-bold">Resume builder</h1>
+          <p className="on-bg-muted text-sm font-semibold">Made from <Link href="/profile" className="underline">your profile</Link>. One page, readable by applicant tracking systems.</p>
         </div>
         <button className="btn-pill" onClick={() => window.print()}>⬇ Download PDF</button>
       </div>
 
       {!isProfileStarted(p) && (
         <div className="card p-5 text-sm">
-          Your profile is empty, so this is a blank template. <Link href="/profile" className="font-bold text-indigo-600 underline dark:text-indigo-400">Fill in your profile</Link> and come back.
+          Your profile is empty, so this is a blank template. <Link href="/profile" className="font-bold text-brand-600 underline dark:text-brand-400">Fill in your profile</Link> and come back.
         </div>
       )}
 
       <div className="grid gap-5 lg:grid-cols-[20rem_1fr]">
         <aside className="space-y-4">
           <div className="card space-y-3 p-4">
-            <h2 className="font-display font-black">Template</h2>
+            <h2 className="font-display font-bold">Template</h2>
             <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
               {TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => setOpt({ template: t.id })} aria-pressed={o.template === t.id}
-                  className={`rounded-2xl border-2 p-2.5 text-left text-sm transition ${o.template === t.id ? "border-indigo-600 bg-indigo-600/10" : "border-transparent bg-slate-500/10 hover:bg-slate-500/20"}`}>
+                  className={`rounded-2xl border-2 p-2.5 text-left text-sm transition ${o.template === t.id ? "border-brand-600 bg-brand-600/10" : "border-transparent bg-slate-500/10 hover:bg-slate-500/20"}`}>
                   <b>{t.label}</b><span className="hidden text-xs text-slate-500 lg:block">{t.hint}</span>
                 </button>
               ))}
@@ -173,7 +173,7 @@ function ResumeBuilder() {
               <div className="flex flex-wrap gap-2" aria-label="Accent colour">
                 {ACCENTS.map((c) => (
                   <button key={c} onClick={() => setOpt({ accent: c })} aria-label={`Accent ${c}`} aria-pressed={o.accent === c}
-                    className={`h-7 w-7 rounded-full transition ${o.accent === c ? "ring-4 ring-indigo-500/50 ring-offset-2" : "hover:scale-110"}`} style={{ background: c }} />
+                    className={`h-7 w-7 rounded-full transition ${o.accent === c ? "ring-4 ring-brand-500/50 ring-offset-2" : "hover:scale-110"}`} style={{ background: c }} />
                 ))}
               </div>
             )}
@@ -185,7 +185,7 @@ function ResumeBuilder() {
           </div>
 
           <div className="card space-y-3 p-4">
-            <h2 className="font-display font-black">🎯 Tailor for a job</h2>
+            <h2 className="font-display font-bold">🎯 Tailor for a job</h2>
             <select className="input" aria-label="Job to tailor for" value={jobId} onChange={(e) => setJobId(e.target.value)}>
               <option value="">Choose a job…</option>
               {jobs.map((j) => <option key={j.id} value={j.id}>{jobLabel(j)}</option>)}
@@ -196,7 +196,7 @@ function ResumeBuilder() {
             ) : (
               <div className="space-y-2.5">
                 <div className="flex items-center gap-3">
-                  <div className="font-display grid h-14 w-14 place-items-center rounded-full text-lg font-black text-white" style={{ background: match.score >= 70 ? "#10b981" : match.score >= 40 ? "#f59e0b" : "#f43f5e" }}>{match.score}%</div>
+                  <div className="font-display grid h-14 w-14 place-items-center rounded-full text-lg font-bold text-white" style={{ background: match.score >= 70 ? "#10b981" : match.score >= 40 ? "#f59e0b" : "#f43f5e" }}>{match.score}%</div>
                   <p className="text-sm">You match <b>{match.matched.length}</b> of <b>{match.wanted.length}</b> skills this job mentions. Matching skills are moved to the front of your resume.</p>
                 </div>
                 {match.matched.length > 0 && <div className="flex flex-wrap gap-1.5">{match.matched.map((k) => <span key={k} className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ {k}</span>)}</div>}
@@ -214,16 +214,16 @@ function ResumeBuilder() {
 
           {report && <AtsCheck score={report.score} groups={report.groups} />}
 
-          <p className="px-1 text-xs text-white/90">Download PDF opens your browser&apos;s print window: choose <b>Save as PDF</b>, paper <b>A4</b>, and turn off <b>Headers and footers</b>.</p>
+          <p className="on-bg-muted px-1 text-xs">Download PDF opens your browser&apos;s print window: choose <b>Save as PDF</b>, paper <b>A4</b>, and turn off <b>Headers and footers</b>.</p>
         </aside>
 
         <div ref={box} className="min-w-0">
           <div style={{ height: `calc(297mm * ${scale})` }} className="overflow-hidden">
-            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: "210mm" }} className="shadow-2xl shadow-violet-900/30">
+            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: "210mm" }} className="shadow-2xl shadow-[rgb(43_29_18/0.25)]">
               <ResumeDoc p={p} o={o} skills={skills} limits={limits} fit={dens} />
             </div>
           </div>
-          <p className="mt-2 text-xs font-semibold text-white/90" data-testid="fit-status">
+          <p className="on-bg-muted mt-2 text-xs font-semibold" data-testid="fit-status">
             {fit.overflow ? "⚠ Too long for one page even at the smallest size: shorten your points on My profile." : notes.length ? `✓ One page. To fit: ${notes.join(", ")}.` : `✓ One page, text ${fit.textPt.toFixed(1)}pt.`}
           </p>
         </div>

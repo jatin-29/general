@@ -12,7 +12,7 @@ export default function ThemeToggle() {
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
     try {
-      localStorage.setItem("theme", next ? "dark" : "light");
+      localStorage.setItem("ui_theme", next ? "dark" : "light");
     } catch {}
   }
 

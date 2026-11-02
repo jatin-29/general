@@ -31,7 +31,7 @@ export default function TokenDialog({ onClose, onSaved, reason }: { onClose: () 
         }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl font-black">🔑 GitHub key</h2>
+          <h2 className="font-display text-xl font-bold">🔑 GitHub key</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-slate-500">✕</button>
         </div>
         {reason && <p className="text-sm font-semibold text-rose-600">{reason}</p>}

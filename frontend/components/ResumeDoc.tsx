@@ -128,7 +128,7 @@ export default function ResumeDoc({ p: raw, o, skills: rawSkills, limits = NO_LI
       }}
     >
       <header style={{ textAlign: modern ? "left" : "center", marginBottom: sp(4) }}>
-        <h1 style={{ fontSize: tx(compact ? 19 : 22), fontWeight: 800, color: modern ? accent : "#111", margin: 0, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{p.name || "Your Name"}</h1>
+        <h1 style={{ fontFamily: "Inter Variable, Arial, sans-serif", fontSize: tx(compact ? 19 : 22), fontWeight: 800, color: modern ? accent : "#111", margin: 0, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{p.name || "Your Name"}</h1>
         {p.headline && <p style={{ margin: `${sp(1)} 0 0`, fontWeight: 600, color: "#333" }}>{p.headline}</p>}
         {contact.length > 0 && (
           <p style={{ margin: `${sp(3)} 0 0`, color: "#333", fontSize: "0.93em" }}>

@@ -37,7 +37,7 @@ export default function SpotifyWidget() {
   const [now, setNow] = useState<NowState | null>(null);
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [themeOn, setThemeOn] = useState(true);
+  const [themeOn, setThemeOn] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -55,7 +55,7 @@ export default function SpotifyWidget() {
     setClientId(getClientId());
     setConnected(isConnected());
     try {
-      setThemeOn(localStorage.getItem("spotify_theme") !== "off");
+      setThemeOn(localStorage.getItem("spotify_theme") === "on"); // off unless you turn it on: the site keeps its own look
     } catch {}
     completeLogin().then((r) => {
       if (r === "connected") {
@@ -164,12 +164,12 @@ export default function SpotifyWidget() {
           <p className="text-slate-600 dark:text-slate-400">Shows what you are playing and tints this site with the album colours. One-time setup (free):</p>
           <ol className="list-decimal space-y-1.5 pl-5 text-slate-600 dark:text-slate-400">
             <li>
-              Open <a className="text-indigo-600 underline dark:text-indigo-400" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> and create an app (tick <b>Web API</b>).
+              Open <a className="text-brand-600 underline dark:text-brand-400" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> and create an app (tick <b>Web API</b>).
             </li>
             <li>
               Add this as a <b>Redirect URI</b>:
-              <button onClick={copyUri} className="mt-1 block w-full break-all rounded-lg border border-dashed border-slate-400/50 px-2 py-1 text-left font-mono text-xs hover:border-indigo-500" title="Click to copy">
-                {typeof window !== "undefined" ? redirectUri() : ""} <span className="text-indigo-600 dark:text-indigo-400">{copied ? "✓ copied" : "(copy)"}</span>
+              <button onClick={copyUri} className="mt-1 block w-full break-all rounded-lg border border-dashed border-slate-400/50 px-2 py-1 text-left font-mono text-xs hover:border-brand-500" title="Click to copy">
+                {typeof window !== "undefined" ? redirectUri() : ""} <span className="text-brand-600 dark:text-brand-400">{copied ? "✓ copied" : "(copy)"}</span>
               </button>
             </li>
             <li>Paste the app&apos;s <b>Client ID</b> below.</li>

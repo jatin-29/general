@@ -88,8 +88,8 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
       <div role="dialog" aria-modal="true" aria-label="Apply kit" className="card max-h-[92vh] w-full max-w-2xl animate-[pop-in_.3s_both] overflow-y-auto p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Apply kit</p>
-            <h2 className="font-display truncate text-xl font-black">{role || "This job"}{company ? ` · ${company}` : ""}</h2>
+            <p className="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">Apply kit</p>
+            <h2 className="font-display truncate text-xl font-bold">{role || "This job"}{company ? ` · ${company}` : ""}</h2>
           </div>
           <button onClick={onClose} aria-label="Close" className="text-xl text-slate-500">✕</button>
         </div>
@@ -103,7 +103,7 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
         <div className="mb-4 flex flex-wrap gap-1.5" role="tablist">
           {TABS.map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-bold transition ${tab === t.id ? "bg-indigo-600 text-white shadow" : "bg-slate-500/10 hover:bg-slate-500/20"}`}>
+              className={`rounded-full px-3.5 py-1.5 text-sm font-bold transition ${tab === t.id ? "bg-brand-600 text-white shadow" : "bg-slate-500/10 hover:bg-slate-500/20"}`}>
               {t.label}
             </button>
           ))}
@@ -196,7 +196,7 @@ export default function ApplyKit({ job, company: c0, role: r0, track, onTrack, o
         )}
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-500/15 pt-3 text-sm">
-          <Link href={`/resume?job=${job.id}`} className="font-bold text-indigo-600 hover:underline dark:text-indigo-400">📄 Tailor my resume for this job →</Link>
+          <Link href={`/resume?job=${job.id}`} className="font-bold text-brand-600 hover:underline dark:text-brand-400">📄 Tailor my resume for this job →</Link>
           <Link href="/profile" className="text-slate-500 hover:underline">Edit profile &amp; templates</Link>
         </div>
       </div>

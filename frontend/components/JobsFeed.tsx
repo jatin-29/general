@@ -24,9 +24,10 @@ const TONE = {
   ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   expired: "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
 };
+// earthy letter avatars: terracotta, mustard, sage, clay rose, slate blue
 const AVATAR = [
-  "linear-gradient(135deg,#ff9ec4,#ff6fa5)", "linear-gradient(135deg,#8fd3ff,#5ab4ff)", "linear-gradient(135deg,#d08bff,#a65bff)",
-  "linear-gradient(135deg,#ffd27a,#ffa63d)", "linear-gradient(135deg,#7be0b4,#2ec48a)",
+  "linear-gradient(135deg,#e07a4f,#c2410c)", "linear-gradient(135deg,#e3b04b,#c98a12)", "linear-gradient(135deg,#8fa16a,#5f7240)",
+  "linear-gradient(135deg,#d9849a,#b4536b)", "linear-gradient(135deg,#7a95b8,#4d6a91)",
 ];
 
 function load<T>(key: string, fallback: T): T {
@@ -49,7 +50,7 @@ function Linkified({ text }: { text: string }) {
     <>
       {text.split(URL_RE).map((part, i) =>
         /^https?:\/\//.test(part) ? (
-          <a key={i} href={part.replace(/[.,;:!?]+$/, "")} target="_blank" rel="noopener noreferrer" className="break-all text-indigo-600 underline dark:text-indigo-400">
+          <a key={i} href={part.replace(/[.,;:!?]+$/, "")} target="_blank" rel="noopener noreferrer" className="break-all text-brand-600 underline dark:text-brand-400">
             {part}
           </a>
         ) : (
@@ -95,7 +96,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
   return (
     <article ref={ref} style={{ transitionDelay: `${(index % 2) * 70}ms` }} className={`card lift reveal flex flex-col gap-3 p-5 ${expired || track?.status === "rejected" ? "opacity-65" : ""}`}>
       <div className="flex gap-3.5">
-        <div className="font-display grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl font-black text-white shadow-md" style={{ background: AVATAR[hue] }} aria-hidden="true">{initial}</div>
+        <div className="font-display grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl font-bold text-white shadow-md" style={{ background: AVATAR[hue] }} aria-hidden="true">{initial}</div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
             <span className="rounded-full bg-sky-100 px-2.5 py-0.5 font-bold text-sky-700 dark:bg-sky-950 dark:text-sky-300">{job.source}</span>
@@ -104,7 +105,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
             {fu && <span className={`rounded-full px-2.5 py-0.5 font-bold ${fu.urgent ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>⏰ {fu.label}</span>}
             <span className="text-slate-500">{timeAgo(job.posted_at ?? job.added_at)}</span>
           </div>
-          <h3 className="font-display text-lg font-black leading-snug">{title}</h3>
+          <h3 className="font-display text-lg font-bold leading-snug">{title}</h3>
           {company && <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{company}</p>}
         </div>
       </div>
@@ -114,7 +115,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
             <Linkified text={body} />
           </p>
           {long && (
-            <button onClick={() => setOpen(!open)} className="mt-1 text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-400">
+            <button onClick={() => setOpen(!open)} className="mt-1 text-xs font-bold text-brand-600 hover:underline dark:text-brand-400">
               {open ? "Show less" : "Read more"}
             </button>
           )}
@@ -130,7 +131,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
         <button type="button" className="btn-ghost" onClick={onKit} title="Email HR, ask for a referral, follow up, track">✉️ Apply kit</button>
         <div className="ml-auto flex items-center gap-2">
           <select aria-label="Application status" value={track?.status ?? ""} onChange={(e) => onStatus(e.target.value as Status)}
-            className={`cursor-pointer rounded-full border-0 py-1.5 pl-3 pr-7 text-xs font-bold outline-none ring-indigo-500/40 focus:ring-4 ${st.tone}`}>
+            className={`cursor-pointer rounded-full border-0 py-1.5 pl-3 pr-7 text-xs font-bold outline-none ring-brand-500/40 focus:ring-4 ${st.tone}`}>
             {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           {onDelete && (
@@ -144,10 +145,10 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
 
 type Quick = "all" | "new" | "soon" | "mine";
 
-function Tile({ label, n, bg, shadow, active, onClick, delay, glyph }: { label: string; n: number; bg: string; shadow: string; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
+function Tile({ label, n, tone, active, onClick, delay, glyph }: { label: string; n: number; tone: "rose" | "blue" | "green" | "brand"; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center">
-      <button className="tile" aria-pressed={active} aria-label={`${label}: ${n}`} onClick={onClick} style={{ background: bg, animationDelay: `${delay}ms`, ["--tile-shadow" as string]: shadow }}>
+      <button className="tile" aria-pressed={active} aria-label={`${label}: ${n}`} onClick={onClick} style={{ animationDelay: `${delay}ms`, ["--tile-color" as string]: `var(--tone-${tone})` }}>
         <span className="glyph" aria-hidden="true">{glyph}</span>
         <span className="num"><CountUp value={n} /></span>
       </button>
@@ -366,7 +367,7 @@ export default function JobsFeed() {
             else setPassword(pw);
           }}
         >
-          <h1 className="font-display text-2xl font-black">🔒 Enter password</h1>
+          <h1 className="font-display text-2xl font-bold">🔒 Enter password</h1>
           <p className="text-sm text-slate-500">These jobs are private. Enter the password you set up (it is remembered on this device).</p>
           <input name="pw" type="password" autoComplete="current-password" autoFocus className="input" placeholder="Password" aria-label="Password" />
           {locked === "wrong" && <p className="text-sm font-semibold text-rose-600">Wrong password. Try again.</p>}
@@ -389,16 +390,16 @@ export default function JobsFeed() {
             <span className="line"><span style={{ animationDelay: "0.05s" }}>Find your next</span></span>
             <span className="line"><span style={{ animationDelay: "0.2s" }}>opportunity</span></span>
           </h1>
-          <p className="mt-4 max-w-md animate-[fade-up_.8s_.45s_both] break-words text-base font-bold text-white/90 drop-shadow">Fresh openings from your groups, collected for you.</p>
+          <p className="mt-4 max-w-md animate-[fade-up_.8s_.45s_both] break-words text-base font-semibold on-bg-muted">Fresh openings from your groups, collected for you.</p>
           <a href="#jobs" className="btn-pill mt-7 animate-[fade-up_.8s_.55s_both]">
             Browse jobs
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </a>
-          <div className="mt-10 flex flex-wrap items-start gap-3 sm:gap-4">
-            <Tile label="New" n={counts.fresh} bg="linear-gradient(160deg,#ff9ec4,#ff6fa5)" shadow="rgb(255 80 150 / .6)" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
-            <Tile label="Closing soon" n={counts.soon} bg="linear-gradient(160deg,#8fd3ff,#4aa8ff)" shadow="rgb(60 150 255 / .6)" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
-            <Tile label="My applications" n={counts.mine} bg="linear-gradient(160deg,#7be0b4,#22b07d)" shadow="rgb(30 170 110 / .55)" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
-            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
+          <div className="mt-10 flex flex-wrap items-start gap-2 sm:gap-4">
+            <Tile label="New" n={counts.fresh} tone="rose" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
+            <Tile label="Closing soon" n={counts.soon} tone="blue" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
+            <Tile label="My applications" n={counts.mine} tone="green" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
+            <Tile label="All jobs" n={counts.total} tone="brand" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
@@ -410,8 +411,8 @@ export default function JobsFeed() {
       {/* ---------- list ---------- */}
       <section id="jobs" className="scroll-mt-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="font-display text-3xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">{showRejected ? "Rejected" : "Latest openings"}</h2>
-          <p className="text-xs font-semibold text-white/90">
+          <h2 className="font-display on-bg text-3xl font-bold">{showRejected ? "Rejected" : "Latest openings"}</h2>
+          <p className="on-bg-muted text-xs font-semibold">
             {jobs || manual.length ? `${visible.length} job${visible.length === 1 ? "" : "s"}` : ""}
             {updatedAt ? ` · Updated ${timeAgo(updatedAt)}` : ""} ·{" "}
             <button onClick={() => refresh()} className="underline">Refresh</button>
@@ -453,7 +454,7 @@ export default function JobsFeed() {
           <div className="grid gap-4 xl:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
         ) : visible.length === 0 ? (
           <div className="card p-12 text-center">
-            <p className="font-display text-xl font-black">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
+            <p className="font-display text-xl font-bold">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
             <p className="mt-1 text-sm text-slate-500">
               {all.length === 0 ? "New posts from your channels appear here every 15 minutes. You can also add one with the + button." : "Try clearing the search or the filter tiles."}
             </p>
@@ -465,9 +466,9 @@ export default function JobsFeed() {
               return (
                 <Fragment key={j.id}>
                   {(i === 0 || jobDay(list[i - 1]) !== d) && (
-                    <h3 className="col-span-full -mb-1 mt-2 flex items-baseline gap-2 font-display text-lg font-black text-white drop-shadow first:mt-0" data-testid="day-heading">
+                    <h3 className="col-span-full -mb-1 mt-2 flex items-baseline gap-2 font-display on-bg text-lg font-bold first:mt-0" data-testid="day-heading">
                       {dayLabel(d)}
-                      <span className="text-xs font-bold text-white/80">{perDay[d] ?? 0} job{perDay[d] === 1 ? "" : "s"}</span>
+                      <span className="on-bg-muted font-sans text-xs font-bold">{perDay[d] ?? 0} job{perDay[d] === 1 ? "" : "s"}</span>
                     </h3>
                   )}
                   <JobCard index={i} job={j} track={tracker[j.id]} onStatus={(st) => setStatus(j, st)} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />

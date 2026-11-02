@@ -15,7 +15,7 @@ function Section({ title, hint, id, children }: { title: string; hint?: string; 
   return (
     <section id={id} className="card scroll-mt-6 space-y-4 p-5">
       <div>
-        <h2 className="font-display text-lg font-black">{title}</h2>
+        <h2 className="font-display text-lg font-bold">{title}</h2>
         {hint && <p className="text-xs text-slate-500">{hint}</p>}
       </div>
       {children}
@@ -75,7 +75,7 @@ function ExtensionCard() {
         <p className="rounded-2xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">Not installed in this browser yet.</p>
       )}
       <ol className="list-decimal space-y-1.5 pl-5 text-sm">
-        <li><a className="font-bold text-violet-600 underline" href={zip} download>Download the extension</a> and unzip it.</li>
+        <li><a className="font-bold text-brand-600 underline" href={zip} download>Download the extension</a> and unzip it.</li>
         <li>In Chrome open <code className="rounded bg-slate-500/10 px-1">chrome://extensions</code> and turn on <b>Developer mode</b> (top right).</li>
         <li>Click <b>Load unpacked</b> and pick the unzipped <b>openingshub-autofill</b> folder.</li>
         <li>Pin it (puzzle icon → pin), reload this page, then add your resume PDF in the extension.</li>
@@ -187,11 +187,11 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
         <div>
-          <h1 className="font-display text-4xl font-black text-white drop-shadow-[0_4px_18px_rgba(90,40,170,.35)]">My profile</h1>
-          <p className="text-sm font-semibold text-white/90">Used in your messages and your resume. Saved only in this browser.</p>
+          <h1 className="font-display on-bg text-4xl font-bold">My profile</h1>
+          <p className="on-bg-muted text-sm font-semibold">Used in your messages and your resume. Saved only in this browser.</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold text-white transition ${saved ? "opacity-100" : "opacity-0"}`}>Saved ✓</span>
+          <span className={`on-bg text-xs font-bold transition ${saved ? "opacity-100" : "opacity-0"}`}>Saved ✓</span>
           <Link href="/resume" className="btn-pill">Build my resume →</Link>
         </div>
       </div>
@@ -222,7 +222,7 @@ export default function ProfilePage() {
 
       <Section title="Skills" hint="Separate with commas. Put your strongest first; the first few go into your messages.">
         <Area label="Skills" value={p.skills} onChange={(v) => update({ skills: v })} placeholder="Python, Java, React, SQL, DSA, Git" rows={2} />
-        {skills.length > 0 && <div className="flex flex-wrap gap-1.5">{skills.map((s) => <span key={s} className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-bold text-violet-700 dark:bg-violet-950 dark:text-violet-300">{s}</span>)}</div>}
+        {skills.length > 0 && <div className="flex flex-wrap gap-1.5">{skills.map((s) => <span key={s} className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-bold text-brand-700 dark:bg-brand-950 dark:text-brand-300">{s}</span>)}</div>}
       </Section>
 
       <Section title="Links" hint="For the resume link use a Google Drive / OneDrive PDF set to 'Anyone with the link can view'.">
@@ -325,7 +325,7 @@ export default function ProfilePage() {
 
       <Section title="Message templates" hint="Edit the wording used in the Apply kit. Placeholders like {company} {role} {name} {college} {skills} {resume} {linkedin} {contact} are filled in for you; a line whose placeholder is empty is left out.">
         <div className="flex flex-wrap gap-1.5">
-          {KINDS.map((k) => <button key={k.id} onClick={() => setKind(k.id)} className={`rounded-full px-3 py-1 text-sm font-bold ${kind === k.id ? "bg-indigo-600 text-white" : "bg-slate-500/10"}`}>{k.label}</button>)}
+          {KINDS.map((k) => <button key={k.id} onClick={() => setKind(k.id)} className={`rounded-full px-3 py-1 text-sm font-bold ${kind === k.id ? "bg-brand-600 text-white" : "bg-slate-500/10"}`}>{k.label}</button>)}
           <span className="mx-1 w-px bg-slate-500/20" />
           {TONES.map((t) => <button key={t} onClick={() => setTone(t)} className={`rounded-full px-3 py-1 text-sm font-bold capitalize ${tone === t ? "bg-pink-500 text-white" : "bg-slate-500/10"}`}>{t}</button>)}
         </div>

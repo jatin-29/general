@@ -52,14 +52,14 @@ function OpeningView() {
   const badge = deadlineBadge(o.deadline, o.is_expired);
   return (
     <div className="space-y-4">
-      <Link href="/" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">← Back to dashboard</Link>
+      <Link href="/" className="text-sm text-brand-600 hover:underline dark:text-brand-400">← Back to dashboard</Link>
       <section className="card space-y-4 p-5">
         <div>
           <h1 className="text-xl font-bold">{o.role}</h1>
           <p className="text-slate-600 dark:text-slate-400">{o.company}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {o.employment_type && <Pill className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{o.employment_type}</Pill>}
+          {o.employment_type && <Pill className="bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">{o.employment_type}</Pill>}
           <Pill className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{badge.label}</Pill>
         </div>
         <dl className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -72,7 +72,7 @@ function OpeningView() {
           {o.apply_link && <a href={o.apply_link} target="_blank" rel="noopener noreferrer" className="btn-primary">Apply ↗</a>}
           {o.source_url && <a href={o.source_url} target="_blank" rel="noopener noreferrer" className="btn-ghost">Open original post ↗</a>}
           <label className="flex cursor-pointer items-center gap-1.5 text-sm">
-            <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={o.applied} onChange={toggle} /> Applied
+            <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={o.applied} onChange={toggle} /> Applied
           </label>
         </div>
       </section>

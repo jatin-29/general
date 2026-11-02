@@ -64,14 +64,14 @@ export default function ResumeImport({ profile, onApply }: { profile: Profile; o
   return (
     <>
       <section
-        className={`card flex flex-wrap items-center gap-4 p-5 transition ${drag ? "ring-4 ring-violet-400/60" : ""}`}
+        className={`card flex flex-wrap items-center gap-4 p-5 transition ${drag ? "ring-4 ring-brand-400/60" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); read(e.dataTransfer.files?.[0]); }}
       >
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-pink-300 to-violet-500 text-2xl shadow-md" aria-hidden="true">📄</div>
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-pink-300 to-brand-500 text-2xl shadow-md" aria-hidden="true">📄</div>
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-lg font-black">Fill from my resume</h2>
+          <h2 className="font-display text-lg font-bold">Fill from my resume</h2>
           <p className="text-xs text-slate-500">Upload your resume (PDF or Word) or drop it here, and this page gets filled in. You choose what to keep and can edit anything. Read in your browser, never uploaded.</p>
         </div>
         <button className="btn-primary" onClick={() => input.current?.click()} disabled={busy}>{busy ? "Reading…" : "⬆ Upload resume"}</button>
@@ -114,13 +114,13 @@ function Review({ found, profile, onClose, onApply }: { found: ParsedResume; pro
     onApply(patch);
   }
 
-  const box = "mt-1 h-4 w-4 shrink-0 accent-violet-600";
+  const box = "mt-1 h-4 w-4 shrink-0 accent-brand-600";
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 backdrop-blur-sm sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="card animate-pop-in flex max-h-[92vh] w-full max-w-2xl flex-col" role="dialog" aria-modal="true" aria-label="Check what was found in your resume">
         <div className="flex items-start justify-between gap-3 border-b border-slate-500/15 p-5 pb-3">
           <div>
-            <h2 className="font-display text-xl font-black">Found in your resume</h2>
+            <h2 className="font-display text-xl font-bold">Found in your resume</h2>
             <p className="text-xs text-slate-500">Fix anything that looks wrong and untick what you don&apos;t want. Ticked items go into your profile.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">✕</button>

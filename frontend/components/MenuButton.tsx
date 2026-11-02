@@ -26,7 +26,7 @@ export default function MenuButton() {
     };
   }, [open]);
 
-  const item = "block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-violet-500/10";
+  const item = "block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-brand-500/10";
   const act = (name: string) => () => {
     setOpen(false);
     fire(name);
@@ -34,11 +34,11 @@ export default function MenuButton() {
 
   return (
     <div ref={box} className="relative">
-      <button onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open} className="group grid h-11 w-11 place-items-center rounded-full text-white transition hover:bg-white/20">
+      <button onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open} className="group grid h-11 w-11 place-items-center rounded-full on-bg transition hover:bg-[rgb(var(--ink)/0.08)]">
         <span className="flex w-6 flex-col gap-[5px]" aria-hidden="true">
-          <i className={`h-[3px] rounded-full bg-white transition-all duration-300 ${open ? "translate-y-[8px] rotate-45" : "w-full"}`} />
-          <i className={`h-[3px] rounded-full bg-white transition-all duration-300 ${open ? "opacity-0" : "w-4/5 group-hover:w-full"}`} />
-          <i className={`h-[3px] rounded-full bg-white transition-all duration-300 ${open ? "-translate-y-[8px] -rotate-45" : "w-3/5 group-hover:w-full"}`} />
+          <i className={`h-[3px] rounded-full bg-[rgb(var(--ink))] transition-all duration-300 ${open ? "translate-y-[8px] rotate-45" : "w-full"}`} />
+          <i className={`h-[3px] rounded-full bg-[rgb(var(--ink))] transition-all duration-300 ${open ? "opacity-0" : "w-4/5 group-hover:w-full"}`} />
+          <i className={`h-[3px] rounded-full bg-[rgb(var(--ink))] transition-all duration-300 ${open ? "-translate-y-[8px] -rotate-45" : "w-3/5 group-hover:w-full"}`} />
         </span>
       </button>
       {open && (

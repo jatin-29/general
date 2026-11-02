@@ -31,7 +31,7 @@ export default function JobCalendar({ counts, value, onChange }: { counts: Recor
         <div className="mb-2 flex items-center justify-between gap-2 px-1 pt-1">
           <button className="grid h-8 w-8 place-items-center rounded-full font-black hover:bg-slate-500/15" onClick={() => go(-1)} aria-label="Previous month">‹</button>
           <div className="text-center">
-            <div className="font-display font-black">{month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</div>
+            <div className="font-display font-bold">{month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</div>
             <div className="text-[11px] font-semibold text-slate-500">{inMonth} job{inMonth === 1 ? "" : "s"} this month</div>
           </div>
           <button className="grid h-8 w-8 place-items-center rounded-full font-black hover:bg-slate-500/15" onClick={() => go(1)} aria-label="Next month">›</button>

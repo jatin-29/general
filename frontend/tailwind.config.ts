@@ -10,6 +10,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        slate: colors.stone, // warm greys everywhere
+        // Warm Paper: burnt orange. The middle shades follow the accent variables.
+        brand: {
+          50: "#fdf6ef", 100: "#fbe9d7", 200: "#f6d0ad", 300: "#efb07c",
+          400: accent("--accent-light"), 500: accent("--accent"), 600: accent("--accent"), 700: accent("--accent-dark"),
+          800: "#7c2d12", 900: "#5f240f", 950: "#3a1407",
+        },
         indigo: {
           ...colors.indigo,
           400: accent("--accent-light"),
@@ -18,7 +25,7 @@ const config: Config = {
           700: accent("--accent-dark"),
         },
       },
-      fontFamily: { sans: ['"Inter Variable"', "ui-sans-serif", "system-ui", "sans-serif"] },
+      fontFamily: { sans: ['"Inter Variable"', "ui-sans-serif", "system-ui", "sans-serif"], serif: ['"Fraunces Variable"', "Georgia", "serif"] },
       keyframes: {
         "fade-up": { from: { opacity: "0", transform: "translateY(14px)" }, to: { opacity: "1", transform: "none" } },
         "pop-in": { from: { opacity: "0", transform: "scale(.96) translateY(8px)" }, to: { opacity: "1", transform: "none" } },

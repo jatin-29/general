@@ -18,10 +18,10 @@ export default function AtsCheck({ score, groups }: { score: number; groups: Che
     <div className="card space-y-3 p-4" aria-label="ATS check">
       <div className="flex items-center gap-3">
         <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${color} ${score * 3.6}deg, rgb(148 163 184 / .25) 0)` }}>
-          <div className="font-display grid h-12 w-12 place-items-center rounded-full bg-[rgb(var(--surface))] text-lg font-black" style={{ color }} data-testid="ats-score">{score}</div>
+          <div className="font-display grid h-12 w-12 place-items-center rounded-full bg-[rgb(var(--surface))] text-lg font-bold" style={{ color }} data-testid="ats-score">{score}</div>
         </div>
         <div className="min-w-0">
-          <h2 className="font-display font-black">ATS check</h2>
+          <h2 className="font-display font-bold">ATS check</h2>
           <p className="text-xs text-slate-500">{issues ? `${issues} thing${issues === 1 ? "" : "s"} to improve` : "Ready for applicant tracking systems"}. Read back the way an ATS reads your PDF.</p>
         </div>
       </div>
@@ -45,7 +45,7 @@ export default function AtsCheck({ score, groups }: { score: number; groups: Che
           </div>
         );
       })}
-      <button className="text-xs font-bold text-violet-600 underline dark:text-violet-300" onClick={() => setAll(!all)}>{all ? "Show only what to fix" : "Show every check"}</button>
+      <button className="text-xs font-bold text-brand-600 underline dark:text-brand-300" onClick={() => setAll(!all)}>{all ? "Show only what to fix" : "Show every check"}</button>
     </div>
   );
 }

@@ -1,32 +1,43 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/nunito";
+@import "@fontsource-variable/fraunces";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- tokens (space-separated RGB so Tailwind opacity works) ---------- */
+/* ---------- Warm Paper: cream page, dark-brown ink, burnt-orange accent ---------- */
+/* (space-separated RGB so Tailwind opacity works) */
 :root {
-  /* olive green + amber (Spotify's album colours replace these while a song plays) */
-  --accent: 162 209 97;
-  --accent-light: 190 223 144;
-  --accent-dark: 134 190 55;
-  --accent-2: 230 166 76;
-  --sky: 142 197 252;
-  --ink: 31 29 77;
-  --surface: 255 255 255;
-  --border: 233 225 255;
-  --m1: var(--sky);
-  --mesh-a: color-mix(in srgb, rgb(var(--sky)) 100%, white 0%);
-  --mesh-b: color-mix(in srgb, rgb(var(--accent-light)) 55%, white);
-  --mesh-c: color-mix(in srgb, rgb(var(--accent-2)) 55%, white);
+  --accent: 194 65 12;
+  --accent-light: 234 88 12;
+  --accent-dark: 154 52 18;
+  --accent-2: 217 119 6;
+  --sky: 120 113 108;
+  --ink: 43 29 18;
+  --muted: 120 98 80;
+  --surface: 255 252 247;
+  --border: 231 220 204;
+  --page: 246 241 233;
+  /* the four counters on the jobs page */
+  --tone-rose: 190 24 93;
+  --tone-blue: 29 78 216;
+  --tone-green: 21 128 61;
+  --tone-brand: 194 65 12;
 }
 .dark {
-  --ink: 238 233 255;
-  --surface: 44 32 92;
-  --border: 90 70 150;
-  --mesh-a: color-mix(in srgb, rgb(var(--sky)) 30%, #140e34);
-  --mesh-b: color-mix(in srgb, rgb(var(--accent)) 38%, #140e34);
-  --mesh-c: color-mix(in srgb, rgb(var(--accent-2)) 34%, #140e34);
+  --accent: 251 146 60;
+  --accent-light: 253 186 116;
+  --accent-dark: 234 88 12;
+  --accent-2: 251 191 36;
+  --ink: 243 234 222;
+  --muted: 176 160 142;
+  --surface: 37 30 25;
+  --border: 66 55 46;
+  --page: 24 19 15;
+  --tone-rose: 244 114 182;
+  --tone-blue: 96 165 250;
+  --tone-green: 74 222 128;
+  --tone-brand: 251 146 60;
 }
 
 @layer base {
@@ -36,42 +47,25 @@
   body {
     @apply font-sans antialiased;
     color: rgb(var(--ink));
-    background: var(--mesh-b);
+    background: rgb(var(--page));
     transition: color 0.4s ease;
   }
-  h1, h2, .font-display { font-family: "Nunito Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif; }
-  ::selection { background: rgb(var(--accent) / 0.35); }
+  h1, h2, .font-display { font-family: "Fraunces Variable", Georgia, "Times New Roman", serif; letter-spacing: -0.01em; }
+  ::selection { background: rgb(var(--accent) / 0.25); }
 }
 
-/* ---------- soft gradient background with slow drifting light ---------- */
+/* ---------- page background: plain paper with a faint warm glow ---------- */
 .mesh {
   position: fixed;
   inset: 0;
   z-index: -1;
-  overflow: hidden;
   pointer-events: none;
-  background: linear-gradient(135deg, var(--mesh-a) 0%, var(--mesh-b) 48%, var(--mesh-c) 100%);
-  transition: background 1.2s ease;
+  background: radial-gradient(1100px 520px at 8% -10%, rgb(var(--accent) / 0.07), transparent 60%), rgb(var(--page));
+  transition: background 0.6s ease;
 }
-.mesh i {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(70px);
-  will-change: transform;
-  background: rgb(255 255 255 / 0.55);
-  animation: drift 24s ease-in-out infinite alternate;
-}
-.mesh i:nth-child(1) { width: 40vmax; height: 40vmax; left: -10vmax; top: -12vmax; }
-.mesh i:nth-child(2) { width: 34vmax; height: 34vmax; right: -8vmax; top: 30vh; background: color-mix(in srgb, rgb(var(--accent-2)) 55%, white); opacity: 0.7; animation-delay: -8s; }
-.mesh i:nth-child(3) { width: 30vmax; height: 30vmax; left: 20vw; bottom: -16vmax; background: color-mix(in srgb, rgb(var(--sky)) 70%, white); opacity: 0.7; animation-delay: -15s; }
-.dark .mesh i { background: rgb(var(--accent) / 0.35); opacity: 0.8; }
-.dark .mesh i:nth-child(2) { background: rgb(var(--accent-2) / 0.28); }
-.dark .mesh i:nth-child(3) { background: rgb(var(--sky) / 0.2); }
-@keyframes drift {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(7vw, -4vh, 0) scale(1.15); }
-  100% { transform: translate3d(-5vw, 5vh, 0) scale(.95); }
-}
+/* text that sits straight on the page */
+.on-bg { color: rgb(var(--ink)); }
+.on-bg-muted { color: rgb(var(--muted)); }
 
 @layer components {
   .input {
@@ -90,10 +84,12 @@
   .btn:active:not(:disabled) { transform: scale(0.95); }
   .btn-primary {
     @apply btn text-white;
-    background-image: linear-gradient(120deg, rgb(var(--accent-2)), rgb(var(--accent)));
-    box-shadow: 0 10px 22px -10px rgb(var(--accent) / 0.9);
+    background: rgb(var(--accent));
+    box-shadow: 0 8px 18px -10px rgb(var(--accent) / 0.8);
   }
-  .btn-primary:hover:not(:disabled) { transform: translateY(-2px) scale(1.02); box-shadow: 0 14px 28px -10px rgb(var(--accent) / 1); }
+  .dark .btn-primary { color: #1c1410; }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); background: rgb(var(--accent-dark)); }
+  .dark .btn-primary:hover:not(:disabled) { background: rgb(var(--accent-light)); }
   .btn-ghost {
     @apply btn;
     color: rgb(var(--ink));
@@ -101,25 +97,26 @@
     border: 1px solid rgb(var(--border));
   }
   .btn-ghost:hover:not(:disabled) { transform: translateY(-2px); border-color: rgb(var(--accent) / 0.6); }
-  /* big white pill, like the hero call-to-action */
+  /* dark ink pill, like the hero call-to-action */
   .btn-pill {
-    @apply inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-xs font-extrabold uppercase tracking-wider transition duration-300;
-    color: rgb(var(--accent-dark));
-    box-shadow: 0 14px 30px -14px rgb(60 20 120 / 0.55);
+    @apply inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-xs font-extrabold uppercase tracking-wider transition duration-300;
+    background: rgb(var(--ink));
+    color: rgb(var(--page));
+    box-shadow: 0 12px 26px -16px rgb(43 29 18 / 0.7);
   }
-  .btn-pill:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 36px -14px rgb(60 20 120 / 0.6); }
+  .btn-pill:hover { transform: translateY(-2px); background: rgb(var(--accent-dark)); color: #fff; }
   .btn-pill svg { transition: transform 0.3s ease; }
   .btn-pill:hover svg { transform: translateX(4px); }
-  /* clean white card */
+  /* paper card */
   .card {
-    border-radius: 1.5rem;
-    background: rgb(var(--surface) / 0.92);
-    border: 1px solid rgb(var(--border) / 0.7);
-    box-shadow: 0 18px 40px -26px rgb(70 30 140 / 0.45);
+    border-radius: 1rem;
+    background: rgb(var(--surface));
+    border: 1px solid rgb(var(--border));
+    box-shadow: 0 1px 0 rgb(43 29 18 / 0.03), 0 12px 30px -22px rgb(43 29 18 / 0.35);
     transition: transform 0.3s cubic-bezier(.2,.8,.2,1), box-shadow 0.3s ease, background-color 0.4s ease;
   }
-  .dark .card { background: rgb(var(--surface) / 0.78); backdrop-filter: blur(14px); }
-  .lift:hover { transform: translateY(-4px); box-shadow: 0 26px 46px -24px rgb(var(--accent) / 0.55); }
+  .dark .card { box-shadow: 0 16px 36px -24px rgb(0 0 0 / 0.7); }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 20px 38px -24px rgb(var(--accent) / 0.45); }
   .gradient-text {
     background-image: linear-gradient(100deg, rgb(var(--accent)), rgb(var(--accent-2)));
     -webkit-background-clip: text;
@@ -138,13 +135,13 @@
 
   /* ----- hero ----- */
   .hero-title {
-    font-family: "Nunito Variable", "Inter Variable", sans-serif;
-    font-weight: 900;
-    line-height: 1.02;
-    letter-spacing: -0.02em;
-    color: #fff;
-    filter: drop-shadow(0 6px 26px rgb(90 40 170 / 0.38)); /* on the whole block, so the clipped lines show no box */
+    font-family: "Fraunces Variable", Georgia, serif;
+    font-weight: 700;
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    color: rgb(var(--ink));
   }
+  .hero-title .line:last-child > span { color: rgb(var(--accent)); font-style: italic; }
   .hero-title .line { display: block; overflow: hidden; padding-bottom: 0.1em; white-space: nowrap; }
   .hero-title .line > span { display: inline-block; animation: rise 0.9s cubic-bezier(.2,.8,.2,1) both; }
   @keyframes rise { from { transform: translateY(110%); } to { transform: none; } }
@@ -155,36 +152,39 @@
     place-items: center;
     width: 5.3rem;
     height: 6.8rem;
-    border-radius: 1.6rem;
-    color: #fff;
+    border-radius: 1.1rem;
+    background: rgb(var(--surface));
+    border: 1px solid rgb(var(--border));
+    color: rgb(var(--tile-color, var(--tone-brand)));
     cursor: pointer;
-    box-shadow: 0 18px 30px -16px var(--tile-shadow, rgb(80 30 160 / 0.6));
+    box-shadow: 0 10px 24px -18px rgb(43 29 18 / 0.5);
     transition: transform 0.35s cubic-bezier(.2,.9,.2,1.2), box-shadow 0.3s ease;
     animation: pop-up 0.7s cubic-bezier(.2,.8,.2,1) both;
   }
+  @media (max-width: 639px) {
+    .tile { width: 5.05rem; height: 6.4rem; }
+    .tile-label { max-width: 5.05rem; font-size: 0.78rem; line-height: 1.15; } /* "My applications" wraps under its box */
+  }
   @media (min-width: 640px) { .tile { width: 6.6rem; height: 8rem; } }
-  .tile:hover { transform: translateY(-8px) rotate(-2deg) scale(1.05); }
-  .tile[aria-pressed="true"] { transform: translateY(-6px) scale(1.06); outline: 4px solid rgb(255 255 255 / 0.95); outline-offset: 2px; }
-  .tile .num { font-family: "Nunito Variable", sans-serif; font-size: 2.6rem; font-weight: 900; line-height: 1; text-shadow: 0 4px 14px rgb(0 0 0 / 0.18); }
+  .tile:hover { transform: translateY(-5px); }
+  .tile[aria-pressed="true"] { transform: translateY(-4px); outline: 2.5px solid rgb(var(--ink)); outline-offset: 3px; }
+  .tile .num { font-family: "Fraunces Variable", Georgia, serif; font-size: 2.6rem; font-weight: 700; line-height: 1; }
   .tile .glyph { position: absolute; top: 0.7rem; right: 0.8rem; opacity: 0.85; transition: transform 0.4s ease; }
   .tile:hover .glyph { transform: rotate(18deg) scale(1.2); }
   @keyframes pop-up { from { opacity: 0; transform: translateY(40px) scale(.9); } to { opacity: 1; transform: none; } }
-  .tile-label { margin-top: 0.55rem; text-align: center; font-weight: 800; font-size: 0.85rem; color: #fff; text-shadow: 0 2px 12px rgb(90 40 170 / 0.4); }
+  .tile-label { margin-top: 0.55rem; text-align: center; font-weight: 700; font-size: 0.85rem; color: rgb(var(--ink)); }
 
   .round-add {
     display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 9999px;
-    border: 2px solid rgb(255 255 255 / 0.85); color: #fff; transition: transform 0.4s cubic-bezier(.2,.9,.2,1.3), background 0.2s;
+    border: 2px solid rgb(var(--ink) / 0.75); color: rgb(var(--ink)); transition: transform 0.4s cubic-bezier(.2,.9,.2,1.3), background 0.2s;
   }
-  .round-add:hover { transform: rotate(90deg) scale(1.12); background: rgb(255 255 255 / 0.25); }
+  .round-add:hover { transform: rotate(90deg) scale(1.12); background: rgb(var(--ink) / 0.08); }
 
-  /* ----- floating candy-like shapes ----- */
+  /* ----- floating job cards in the hero ----- */
   .hero-visual { position: relative; width: 100%; max-width: 27rem; aspect-ratio: 1 / 1.05; margin-inline: auto; }
   .par { position: absolute; transform: translate3d(calc(var(--mx, 0) * var(--d, 10) * 1px), calc(var(--my, 0) * var(--d, 10) * 1px), 0); transition: transform 0.25s ease-out; }
-  .orb { display: block; border-radius: 9999px; background: radial-gradient(circle at 30% 25%, rgb(255 255 255 / 0.85), transparent 38%), var(--c); box-shadow: inset -6px -8px 14px rgb(0 0 0 / 0.12), 0 12px 20px -8px rgb(70 20 140 / 0.45); animation: float-a var(--t, 7s) ease-in-out infinite; animation-delay: var(--dl, 0s); }
-  .sprinkle { display: block; width: 0.55rem; height: 1.7rem; border-radius: 9999px; background: var(--c); transform: rotate(var(--r, 30deg)); animation: float-b var(--t, 8s) ease-in-out infinite; animation-delay: var(--dl, 0s); }
-  @keyframes float-a { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-16px) rotate(8deg); } }
-  @keyframes float-b { 0%, 100% { transform: rotate(var(--r, 30deg)) translateY(0); } 50% { transform: rotate(calc(var(--r, 30deg) + 25deg)) translateY(-12px); } }
-  .stack-card { border-radius: 1.6rem; padding: 1rem 1.1rem; width: 100%; box-shadow: 0 24px 40px -20px rgb(70 20 140 / 0.55); animation: float-a 6.5s ease-in-out infinite; }
+  @keyframes float-a { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-12px) rotate(1.5deg); } }
+  .stack-card { border-radius: 1.1rem; padding: 1rem 1.1rem; width: 100%; box-shadow: 0 22px 36px -22px rgb(43 29 18 / 0.5); animation: float-a 6.5s ease-in-out infinite; }
 
   .reveal { opacity: 0; transform: translateY(28px) scale(.98); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(.2,.8,.2,1); }
   .reveal.in { opacity: 1; transform: none; }

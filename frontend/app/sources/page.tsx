@@ -98,7 +98,7 @@ export default function SourcesPage() {
       <div>
         <h1 className="text-xl font-bold">Sources</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Choose which Telegram groups/channels and YouTube channels to read. Only these are checked, every 5 minutes. Set up your keys in <Link href="/settings" className="text-indigo-600 underline dark:text-indigo-400">Settings</Link> first.
+          Choose which Telegram groups/channels and YouTube channels to read. Only these are checked, every 5 minutes. Set up your keys in <Link href="/settings" className="text-brand-600 underline dark:text-brand-400">Settings</Link> first.
         </p>
       </div>
 
@@ -121,7 +121,7 @@ export default function SourcesPage() {
                     <label className={`flex items-center gap-3 px-3 py-2 text-sm ${added ? "opacity-50" : "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"}`}>
                       <input
                         type="checkbox"
-                        className="h-4 w-4 accent-indigo-600"
+                        className="h-4 w-4 accent-brand-600"
                         disabled={added}
                         checked={added || picked.has(c.identifier)}
                         onChange={(e) => {
@@ -182,7 +182,7 @@ export default function SourcesPage() {
                 <label className="flex cursor-pointer items-center gap-1.5 text-sm">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-indigo-600"
+                    className="h-4 w-4 accent-brand-600"
                     checked={s.enabled}
                     disabled={busy}
                     onChange={async () => (await run(() => setSourceEnabled(s.id, !s.enabled))) && load()}

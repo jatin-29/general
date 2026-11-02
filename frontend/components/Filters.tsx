@@ -50,15 +50,15 @@ export default function Filters({
       />
       <div className="flex items-center gap-4 text-sm">
         <label className="flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={value.hideApplied} onChange={(e) => onChange({ hideApplied: e.target.checked })} />
+          <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={value.hideApplied} onChange={(e) => onChange({ hideApplied: e.target.checked })} />
           Hide applied
         </label>
         <label className="flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" className="h-4 w-4 accent-indigo-600" checked={value.showExpired} onChange={(e) => onChange({ showExpired: e.target.checked })} />
+          <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={value.showExpired} onChange={(e) => onChange({ showExpired: e.target.checked })} />
           Show expired
         </label>
         {dirty && (
-          <button onClick={onReset} className="ml-auto text-indigo-600 hover:underline dark:text-indigo-400">
+          <button onClick={onReset} className="ml-auto text-brand-600 hover:underline dark:text-brand-400">
             Reset
           </button>
         )}
