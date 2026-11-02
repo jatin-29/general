@@ -145,8 +145,15 @@ WA_NOISE = re.compile(
     r"this message was deleted|(missed|incoming|ongoing) (voice|video) call|.{0,3}(photo|video|voice message|audio|sticker|gif|document))$",
     re.I,
 )
-# "Hiring: SDE intern" starts like "Rahul: hi", but it is the post itself
-WA_NOT_SENDER = re.compile(r"^(hiring|job|jobs|role|position|company|location|eligibility|salary|ctc|stipend|apply|batch|openings?|urgent|update|alert|note|link|deadline)$", re.I)
+# "Hiring: SDE intern" or "Responsibilities and Duties: …" start like "Rahul: hi", but they are the post itself
+WA_NOT_SENDER = re.compile(
+    r"hiring|job|role|position|company|location|eligib|salary|ctc|stipend|apply|batch|opening|skill|experience|qualif|"
+    r"responsib|dut(?:y|ies)|requirement|note|link|deadline|date|venue|time|mode|type|about|description|\bjd\b|profile|"
+    r"title|designation|package|perks|benefit|process|round|interview|registration|website|email|contact|address|timing|"
+    r"shift|urgent|update|alert",
+    re.I,
+)
+WA_SENDER = re.compile(r"^(~\s?)?(\+?[^\W_][\w .'’()+\-]{0,39}?):\s+")  # a name or a phone number
 
 
 def parse_wa(message: str) -> tuple[str, str] | None:
@@ -156,10 +163,10 @@ def parse_wa(message: str) -> tuple[str, str] | None:
         return None
     title, text = m["title"].strip(), m["text"].strip()
     group = re.split(r"\s*\(\d+ (?:new )?messages?\)|:\s", title, maxsplit=1)[0].strip() or "WhatsApp"
-    if ":" not in title:  # group notifications put the sender in front of the text: "~ Rahul: We're hiring"
-        sender = re.match(r"^(~\s?)?([\w .'+()\-]{1,40}):\s+", text)
-        if sender and not WA_NOT_SENDER.match(sender[2].strip()):
-            text = text[sender.end():]
+    # group notifications put the sender in front of the text: "~ Rahul: We're hiring", "Akshat Jain: Responsibilities…"
+    sender = WA_SENDER.match(text)
+    if sender and len(sender[2].split()) <= 4 and not WA_NOT_SENDER.search(sender[2]):
+        text = text[sender.end():]
     if not text or WA_NOISE.match(text):
         return None
     return group, text

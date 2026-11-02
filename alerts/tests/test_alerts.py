@@ -427,6 +427,10 @@ def test_parse_wa_notifications():
     assert parse_wa("WA: Off Campus Jobs: Rahul || Hiring: QA intern at Beta") == ("Off Campus Jobs", "Hiring: QA intern at Beta")  # sender in title
     assert parse_wa("WA: Jobs || Hiring: QA intern at Beta") == ("Jobs", "Hiring: QA intern at Beta")  # "Hiring:" is not a person
     assert parse_wa("WA: Jobs || Line one\nLine two") == ("Jobs", "Line one\nLine two")
+    # sender's name in the text even though the title has a colon too
+    assert parse_wa("WA: EP1 Badmosi (AFC💔): Akshat Jain || Akshat Jain: Responsibilities and Duties: 1. Help create") == (
+        "EP1 Badmosi (AFC💔)", "Responsibilities and Duties: 1. Help create")
+    assert parse_wa("WA: Jobs || Company Name: Infosys, Role: SDE") == ("Jobs", "Company Name: Infosys, Role: SDE")  # a field label, not a person
     for noise in ("WA: WhatsApp || 5 new messages", "WA: Jobs || 12 messages from 4 chats", "WA: Jobs || Rahul: 📷 Photo",
                   "WA: Jobs || This message was deleted", "hello", "WA: Jobs ||  "):
         assert parse_wa(noise) is None, noise

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, parseIso, timeAgo, type Job } from "@/lib/jobs";
+import { PasswordRequired, WrongPassword, fetchJobs, jobBody, jobTitle, parseIso, postText, timeAgo, type Job } from "@/lib/jobs";
 import { daysLeft, deadlineBadge, parseJobCached } from "@/lib/extract";
 import AddJobDialog from "./AddJobDialog";
 import CountUp from "./CountUp";
@@ -67,15 +67,27 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLElement>(null);
-  const parsed = parseJobCached(job.text);
+  const text = postText(job); // without a WhatsApp sender's name in front
+  const parsed = parseJobCached(text);
   const company = job.company ?? parsed.company;
   const role = job.role ?? parsed.role;
   const deadline = job.deadline ? parseIso(job.deadline) : parsed.deadline;
   const badge = deadline ? deadlineBadge(deadline) : null;
   const expired = badge?.tone === "expired";
-  const title = role ?? jobTitle(job.text);
-  const body = job.manual ? job.text.trim() : role ? job.text.trim() : jobBody(job.text);
-  const long = body.length > 220 || body.split("\n").length > 4;
+  const title = role ?? jobTitle(text);
+  const body = job.manual ? text.trim() : role ? text.trim() : jobBody(text);
+  // "Read more" whenever the 3-line preview actually hides text (depends on the card's width)
+  const bodyRef = useRef<HTMLParagraphElement>(null);
+  const [cut, setCut] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || open) return;
+    const check = () => setCut(el.scrollHeight > el.clientHeight + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [body, open]);
   const initial = (company ?? title).replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase() || "•";
   const hue = [...(company ?? title)].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR.length;
   const fu = followUpBadge(track);
@@ -113,10 +125,10 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
       </div>
       {body && (
         <div>
-          <p className={`whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300 ${open ? "" : "line-clamp-3"}`}>
+          <p ref={bodyRef} className={`whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300 ${open ? "" : "line-clamp-3"}`}>
             <Linkified text={body} />
           </p>
-          {long && (
+          {(cut || open) && (
             <button onClick={() => setOpen(!open)} className="mt-1 text-xs font-bold text-brand-600 hover:underline dark:text-brand-400">
               {open ? "Show less" : "Read more"}
             </button>
@@ -564,8 +576,8 @@ export default function JobsFeed() {
       {kitJob && (
         <ApplyKit
           job={kitJob}
-          company={kitJob.company ?? parseJobCached(kitJob.text).company}
-          role={kitJob.role ?? parseJobCached(kitJob.text).role}
+          company={kitJob.company ?? parseJobCached(postText(kitJob)).company}
+          role={kitJob.role ?? parseJobCached(postText(kitJob)).role}
           track={tracker[kitJob.id]}
           onTrack={(t) => setTrack(kitJob.id, t)}
           onClose={() => setKitJob(null)}

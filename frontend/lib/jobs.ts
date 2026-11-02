@@ -63,17 +63,34 @@ export async function fetchJobs(password = ""): Promise<JobsFile> {
 }
 
 /** First non-empty line, tidied, used as the card title. */
+const TITLE_MAX = 110;
+const firstLine = (text: string) => (text.split("\n").find((l) => l.trim()) ?? "").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+
+/** The first line, shortened at a word with "…" when it is long. */
 export function jobTitle(text: string): string {
-  const line = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "Job opening";
-  const clean = line.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
-  return (clean || "Job opening").slice(0, 110);
+  const line = firstLine(text);
+  if (!line) return "Job opening";
+  if (line.length <= TITLE_MAX) return line;
+  const cut = line.slice(0, TITLE_MAX);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 60 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-–]+$/, "")}…`;
 }
 
-/** Everything after the title line. */
+/** Everything after the title line; the whole post when the title had to be shortened, so nothing is lost. */
 export function jobBody(text: string): string {
+  if (firstLine(text).length > TITLE_MAX) return text.trim();
   const lines = text.split("\n");
   const i = lines.findIndex((l) => l.trim().length > 0);
   return lines.slice(i + 1).join("\n").trim();
+}
+
+// "Akshat Jain: Responsibilities…" in WhatsApp posts: the sender's name is not part of the post.
+const SENDER = /^(?:~\s?)?([\p{L}\p{N}.'’()+\- ]{1,40}?):\s+/u;
+const NOT_A_NAME = /hiring|job|role|position|company|location|eligib|salary|ctc|stipend|apply|batch|opening|skill|experience|qualif|responsib|dut(?:y|ies)|requirement|note|link|deadline|date|venue|time|mode|type|about|description|\bjd\b|profile|title|designation|package|perks|benefit|process|round|interview|registration|website|email|contact|address|timing|shift|urgent|update/i;
+export function postText(job: Job): string {
+  if (!job.source.startsWith("WhatsApp")) return job.text;
+  const m = job.text.match(SENDER);
+  return m && m[1].trim().split(/\s+/).length <= 4 && !NOT_A_NAME.test(m[1]) ? job.text.slice(m[0].length) : job.text;
 }
 
 export function timeAgo(iso: string | null): string {
