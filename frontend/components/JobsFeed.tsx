@@ -10,6 +10,8 @@ import TokenDialog from "./TokenDialog";
 import ApplyKit from "./ApplyKit";
 import { DONE_APPLYING, STATUSES, followUpBadge, loadTracker, saveTracker, withStatus, type Status, type Track, type Tracker } from "@/lib/tracker";
 import { useToast } from "./Toast";
+import JobCalendar from "./JobCalendar";
+import { dayLabel, jobDay, jobTime } from "@/lib/days";
 import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
 const PAGE = 24;
@@ -168,6 +170,7 @@ export default function JobsFeed() {
   const [quick, setQuick] = useState<Quick>("all");
   const [hideApplied, setHideApplied] = useState(false);
   const [showRejected, setShowRejected] = useState(false); // rejected jobs are hidden unless you open this list
+  const [day, setDay] = useState(""); // "2026-11-01": only that day's jobs
   const [tracker, setTrackerState] = useState<Tracker>({});
   const [kitJob, setKitJob] = useState<Job | null>(null);
   const [lastVisit, setLastVisit] = useState<number>(0);
@@ -326,7 +329,8 @@ export default function JobsFeed() {
     [open, isNewJob, tracker],
   );
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
-  const visible = useMemo(() => {
+  // Everything the filters allow (newest first); the calendar counts these, the list shows the chosen day.
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (showRejected ? rejected : open).filter(
       (j) =>
@@ -334,11 +338,17 @@ export default function JobsFeed() {
         (showRejected || quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : !!statusOf(j.id))) &&
         (showRejected || !hideApplied || !DONE_APPLYING.includes(statusOf(j.id))) &&
         (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
-    );
+    ).sort((a, b) => jobTime(b) - jobTime(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, rejected, showRejected, search, source, quick, hideApplied, tracker, isNewJob]);
+  const perDay = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const j of filtered) c[jobDay(j)] = (c[jobDay(j)] ?? 0) + 1;
+    return c;
+  }, [filtered]);
+  const visible = useMemo(() => (day ? filtered.filter((j) => jobDay(j) === day) : filtered), [filtered, day]);
 
-  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected]);
+  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected, day]);
   useEffect(() => {
     if (showRejected && rejected.length === 0) setShowRejected(false);
   }, [showRejected, rejected.length]);
@@ -388,7 +398,7 @@ export default function JobsFeed() {
             <Tile label="New" n={counts.fresh} bg="linear-gradient(160deg,#ff9ec4,#ff6fa5)" shadow="rgb(255 80 150 / .6)" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
             <Tile label="Closing soon" n={counts.soon} bg="linear-gradient(160deg,#8fd3ff,#4aa8ff)" shadow="rgb(60 150 255 / .6)" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
             <Tile label="My applications" n={counts.mine} bg="linear-gradient(160deg,#7be0b4,#22b07d)" shadow="rgb(30 170 110 / .55)" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
-            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setQuick("all"); }} delay={700} glyph={Grid} />
+            <Tile label="All jobs" n={counts.total} bg="linear-gradient(160deg,#d08bff,#9a55ff)" shadow="rgb(140 70 255 / .6)" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
@@ -416,6 +426,8 @@ export default function JobsFeed() {
           </p>
         </div>
 
+        <div className="grid gap-5 lg:grid-cols-[1fr_19rem]">
+        <div className="min-w-0">
         <div className="card mb-5 grid gap-3 p-3 sm:grid-cols-[1fr_13rem_auto] sm:items-center">
           <input className="input" type="search" placeholder="Search jobs, companies, skills…" aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="input" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
@@ -428,13 +440,17 @@ export default function JobsFeed() {
           </label>
         </div>
 
+        <div className="mb-5 lg:hidden">
+          <JobCalendar counts={perDay} value={day} onChange={setDay} />
+        </div>
+
         {error && !jobs ? (
           <div className="card flex flex-col items-center gap-3 p-10 text-center">
             <p className="text-sm font-semibold text-rose-600">{error}</p>
             <button className="btn-ghost" onClick={() => refresh()}>Retry</button>
           </div>
         ) : !jobs && manual.length === 0 ? (
-          <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
+          <div className="grid gap-4 xl:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
         ) : visible.length === 0 ? (
           <div className="card p-12 text-center">
             <p className="font-display text-xl font-black">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
@@ -443,15 +459,31 @@ export default function JobsFeed() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {visible.slice(0, shown).map((j, i) => (
-              <JobCard key={j.id} index={i} job={j} track={tracker[j.id]} onStatus={(st) => setStatus(j, st)} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
-            ))}
+          <div className="grid gap-4 xl:grid-cols-2">
+            {visible.slice(0, shown).map((j, i, list) => {
+              const d = jobDay(j);
+              return (
+                <Fragment key={j.id}>
+                  {(i === 0 || jobDay(list[i - 1]) !== d) && (
+                    <h3 className="col-span-full -mb-1 mt-2 flex items-baseline gap-2 font-display text-lg font-black text-white drop-shadow first:mt-0" data-testid="day-heading">
+                      {dayLabel(d)}
+                      <span className="text-xs font-bold text-white/80">{perDay[d] ?? 0} job{perDay[d] === 1 ? "" : "s"}</span>
+                    </h3>
+                  )}
+                  <JobCard index={i} job={j} track={tracker[j.id]} onStatus={(st) => setStatus(j, st)} onKit={() => setKitJob(j)} onDelete={() => deleteJob(j)} isNew={isNewJob(j)} />
+                </Fragment>
+              );
+            })}
             {visible.length > shown && (
-              <button className="btn-pill justify-center self-start lg:col-span-2 lg:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
+              <button className="btn-pill col-span-full justify-center self-start xl:mx-auto" onClick={() => setShown(shown + PAGE)}>Show more ({visible.length - shown} left)</button>
             )}
           </div>
         )}
+        </div>
+        <aside className="hidden lg:sticky lg:top-4 lg:block lg:self-start">
+          <JobCalendar counts={perDay} value={day} onChange={setDay} />
+        </aside>
+        </div>
       </section>
 
       {adding && <AddJobDialog onClose={() => setAdding(false)} onSave={addManual} />}
