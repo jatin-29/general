@@ -11,7 +11,7 @@ import ApplyKit from "./ApplyKit";
 import { DONE_APPLYING, STATUSES, followUpBadge, loadTracker, saveTracker, withStatus, type Status, type Track, type Tracker } from "@/lib/tracker";
 import { useToast } from "./Toast";
 import JobCalendar from "./JobCalendar";
-import { dayKey, dayLabel, jobDay, jobTime } from "@/lib/days";
+import { dayKey, dayLabel, jobDay, jobTime, shortDay } from "@/lib/days";
 import { isFresherJob } from "@/lib/fresher";
 import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
@@ -157,7 +157,7 @@ function JobCard({ job, isNew, track, onStatus, onKit, onDelete, index = 0 }: {
   );
 }
 
-type Quick = "all" | "new" | "soon" | "mine";
+type Quick = "all" | "new" | "soon" | "mine" | "applied"; // "applied": applied on the day being viewed
 
 function Tile({ label, n, tone, active, onClick, delay, glyph }: { label: string; n: number; tone: "rose" | "blue" | "green" | "brand"; active: boolean; onClick: () => void; delay: number; glyph: React.ReactNode }) {
   return (
@@ -348,11 +348,17 @@ export default function JobsFeed() {
   const pool = useMemo(() => (freshers ? all.filter(isFresherJob) : all), [all, freshers]);
   const rejected = useMemo(() => pool.filter((j) => tracker[j.id]?.status === "rejected"), [pool, tracker]);
   const open = useMemo(() => pool.filter((j) => tracker[j.id]?.status !== "rejected"), [pool, tracker]);
-  const counts = useMemo(
-    () => ({ total: open.length, fresh: open.filter(isNewJob).length, soon: open.filter(isSoon).length, mine: open.filter((j) => statusOf(j.id)).length }),
+  // The counters follow the day being viewed (today at first); with "All dates" they count everything.
+  const counts = useMemo(() => {
+    const ofDay = day ? open.filter((j) => jobDay(j) === day) : open;
+    return {
+      total: ofDay.length,
+      fresh: ofDay.filter(isNewJob).length,
+      soon: ofDay.filter(isSoon).length,
+      mine: day ? open.filter((j) => tracker[j.id]?.appliedOn === day).length : open.filter((j) => statusOf(j.id)).length,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open, isNewJob, tracker],
-  );
+  }, [open, day, isNewJob, tracker]);
   const sources = useMemo(() => [...new Set(all.map((j) => j.source))].sort(), [all]);
   // Everything the filters allow (newest first); the calendar counts these, the list shows the chosen day.
   const filtered = useMemo(() => {
@@ -360,20 +366,21 @@ export default function JobsFeed() {
     return (showRejected ? rejected : open).filter(
       (j) =>
         (!source || j.source === source) &&
-        (showRejected || quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : !!statusOf(j.id))) &&
+        (showRejected || quick === "all" || (quick === "new" ? isNewJob(j) : quick === "soon" ? isSoon(j) : quick === "applied" ? tracker[j.id]?.appliedOn === day : !!statusOf(j.id))) &&
         (showRejected || !hideApplied || !DONE_APPLYING.includes(statusOf(j.id))) &&
         (!q || `${j.text} ${j.company ?? ""} ${j.role ?? ""}`.toLowerCase().includes(q)),
     ).sort((a, b) => jobTime(b) - jobTime(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, rejected, showRejected, search, source, quick, hideApplied, tracker, isNewJob]);
+  }, [open, rejected, showRejected, search, source, quick, hideApplied, tracker, isNewJob, day]);
   const perDay = useMemo(() => {
     const c: Record<string, number> = {};
     for (const j of filtered) c[jobDay(j)] = (c[jobDay(j)] ?? 0) + 1;
     return c;
   }, [filtered]);
-  // One day at a time (today first). Searching and the New / Closing soon / My applications counters look at every date.
+  // One day at a time (today first). Searching looks at every date; "Applied today" lists what you applied to that
+  // day, whenever it was posted.
   const searching = search.trim() !== "";
-  const shownDay = searching || quick !== "all" ? "" : day;
+  const shownDay = searching || quick === "applied" ? "" : day;
   const visible = useMemo(() => (shownDay ? filtered.filter((j) => jobDay(j) === shownDay) : filtered), [filtered, shownDay]);
   const jobDays = useMemo(() => Object.keys(perDay).sort(), [perDay]);
   const prevDay = shownDay ? jobDays.filter((k) => k < shownDay).pop() : undefined; // skips days without jobs
@@ -434,8 +441,12 @@ export default function JobsFeed() {
           <div className="mt-10 flex flex-wrap items-start gap-2 sm:gap-4">
             <Tile label="New" n={counts.fresh} tone="rose" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
             <Tile label="Closing soon" n={counts.soon} tone="blue" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
-            <Tile label="My applications" n={counts.mine} tone="green" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
-            <Tile label="All jobs" n={counts.total} tone="brand" active={quick === "all" && !day && !searching && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
+            <Tile label={day ? `Applied ${shortDay(day)}` : "My applications"} n={counts.mine} tone="green" active={quick === (day ? "applied" : "mine")} onClick={tile(day ? "applied" : "mine")} delay={650} glyph={Check} />
+            <Tile
+              label={!day ? "All jobs" : day === today ? "Today's jobs" : shortDay(day) === "yesterday" ? "Yesterday's jobs" : `Jobs ${shortDay(day)}`}
+              n={counts.total} tone="brand" active={quick === "all" && !searching && !showRejected}
+              onClick={() => { setShowRejected(false); setSearch(""); setQuick("all"); }} delay={700} glyph={Grid}
+            />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
@@ -500,6 +511,7 @@ export default function JobsFeed() {
               <div className="on-bg-muted text-xs font-semibold">
                 {perDay[shownDay] ?? 0} job{perDay[shownDay] === 1 ? "" : "s"}
                 {shownDay !== today && <> · <button className="underline" onClick={() => setDay(today)}>Back to today</button></>}
+                {" · "}<button className="underline" onClick={() => { setDay(""); setQuick("all"); }} aria-label="Show every date">All dates</button>
               </div>
             </div>
             <button className="btn-ghost !px-3" disabled={!nextDay} onClick={() => nextDay && setDay(nextDay)} aria-label="Next day">
@@ -508,8 +520,17 @@ export default function JobsFeed() {
           </div>
         ) : (
           <p className="on-bg-muted mb-3 text-xs font-semibold">
-            {searching ? "Searching every date." : quick !== "all" ? "From every date." : "Every date, newest first."}{" "}
-            <button className="underline" onClick={() => { setSearch(""); setQuick("all"); setDay(today); }}>Show today only</button>
+            {quick === "applied" && !searching ? (
+              <>
+                Jobs you applied to {day === today ? "today" : `on ${dayLabel(day)}`}, whenever they were posted.{" "}
+                <button className="underline" onClick={() => setQuick("all")}>Back to {day === today ? "today's" : `${shortDay(day)}'s`} jobs</button>
+              </>
+            ) : (
+              <>
+                {searching ? "Searching every date." : quick !== "all" ? "From every date." : "Every date, newest first."}{" "}
+                <button className="underline" onClick={() => { setSearch(""); setQuick("all"); setDay(today); }}>Show today only</button>
+              </>
+            )}
             <button className="ml-2 underline lg:hidden" onClick={() => setCalOpen(!calOpen)}>Pick a date</button>
           </p>
         )}

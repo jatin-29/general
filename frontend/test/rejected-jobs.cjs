@@ -20,7 +20,7 @@ const DATA = JSON.stringify({ updated_at: "2026-10-29T08:00:00Z", jobs: [job("aa
   const cards = () => pg.locator("#jobs article").evaluateAll((a) => a.map((x) => x.querySelector("h3, h2, .font-display")?.textContent?.trim()));
   await pg.getByText("1 rejected hidden").waitFor();
   assert.equal(await pg.locator("#jobs article").count(), 2);
-  await pg.getByRole("button", { name: "All jobs: 2" }).waitFor();
+  await pg.getByRole("button", { name: "Today's jobs: 2" }).waitFor();
   console.log("  ✓ already-rejected job hidden; All jobs = 2; '1 rejected hidden' shown");
 
   // reject one from its card

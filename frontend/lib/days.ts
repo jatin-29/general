@@ -19,6 +19,12 @@ export function dayLabel(key: string, now = new Date()) {
   return fromKey(key).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
+/** "today", "yesterday" or "1 Nov", for short labels. */
+export function shortDay(key: string, now = new Date()) {
+  const l = dayLabel(key, now);
+  return l === "Today" || l === "Yesterday" ? l.toLowerCase() : fromKey(key).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 export const monthStart = (k: string) => {
   const d = fromKey(k);
   return new Date(d.getFullYear(), d.getMonth(), 1);

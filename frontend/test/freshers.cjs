@@ -32,7 +32,7 @@ const jobs = [
   await pg.waitForTimeout(300);
   assert.equal(await cards(), 2);
   assert.match(await pg.locator("#jobs").innerText(), /2 fresher jobs/);
-  assert.equal(await pg.getByRole("button", { name: /^All jobs/ }).getAttribute("aria-label"), "All jobs: 2");
+  assert.equal(await pg.getByRole("button", { name: /^Today's jobs/ }).getAttribute("aria-label"), "Today's jobs: 2");
   console.log("  ✓ Freshers only: 2 of 4 shown, counters follow");
 
   await pg.reload();

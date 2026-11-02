@@ -48,9 +48,10 @@ async function page(b, vp, jobs) {
     await pg.getByRole("button", { name: "Back to today" }).click();
     assert.equal(await title(), "Today");
 
-    await pg.getByRole("button", { name: /^All jobs/ }).click();
+    await pg.getByRole("button", { name: "Show every date" }).click();
     await pg.waitForTimeout(300);
     assert.equal(await cards(), 6);
+    assert.equal(await pg.getByRole("button", { name: /^All jobs/ }).getAttribute("aria-label"), "All jobs: 6");
     assert.equal((await pg.getByTestId("day-heading").allInnerTexts()).length, 3);
     await pg.getByRole("button", { name: "Show today only" }).click();
     assert.equal(await cards(), 2);
@@ -66,6 +67,22 @@ async function page(b, vp, jobs) {
     await pg.waitForTimeout(300);
     assert.equal(await title(), label(old));
     assert.equal(await cards(), 3);
+    // counters follow the day: apply to one of today's jobs, then look at today and yesterday
+    await pg.getByRole("button", { name: "Back to today" }).click();
+    assert.equal(await pg.getByRole("button", { name: /^Today's jobs/ }).getAttribute("aria-label"), "Today's jobs: 2");
+    await pg.locator("#jobs article").first().getByLabel("Application status").selectOption("applied");
+    await pg.waitForTimeout(200);
+    assert.equal(await pg.getByRole("button", { name: /^Applied today/ }).getAttribute("aria-label"), "Applied today: 1");
+    await pg.getByRole("button", { name: /^Applied today/ }).click();
+    await pg.waitForTimeout(300);
+    assert.equal(await cards(), 1);
+    assert.match(await pg.locator("#jobs").innerText(), /Jobs you applied to today/);
+    await pg.getByRole("button", { name: /^Applied today/ }).click(); // off again
+    await pg.getByRole("button", { name: "Previous day" }).click();
+    assert.equal(await pg.getByRole("button", { name: /^Yesterday's jobs/ }).getAttribute("aria-label"), "Yesterday's jobs: 1");
+    assert.equal(await pg.getByRole("button", { name: /^Applied yesterday/ }).getAttribute("aria-label"), "Applied yesterday: 0");
+
+    console.log(`  ✓ ${mobile ? "phone" : "desktop"}: counters follow the day (Today's jobs 2, Applied today 1; Yesterday's jobs 1, Applied yesterday 0)`);
     console.log(`  ✓ ${mobile ? "phone" : "desktop"}: opens on Today (2); ‹ goes to Yesterday (1) then ${label(old)} (3); All jobs shows every date; search spans dates; calendar picks a day`);
     await pg.context().close();
   }
