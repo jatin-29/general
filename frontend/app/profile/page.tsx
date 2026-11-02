@@ -88,7 +88,7 @@ function ExtensionCard() {
       <ol className="list-decimal space-y-1.5 pl-5 text-sm">
         <li><a className="font-bold text-brand-600 underline" href={zip} download>Download the extension</a> and unzip it.</li>
         <li>In Chrome open <code className="rounded bg-slate-500/10 px-1">chrome://extensions</code> and turn on <b>Developer mode</b> (top right).</li>
-        <li>Click <b>Load unpacked</b> and pick the unzipped <b>openingshub-autofill</b> folder.</li>
+        <li>Click <b>Load unpacked</b> and pick the unzipped folder: the one with <b>manifest.json</b> directly inside (if Windows made a folder inside a folder, pick the inner one).</li>
         <li>Pin it (puzzle icon → pin), reload this page, then add your resume PDF in the extension.</li>
       </ol>
       <p className="text-xs text-slate-500">

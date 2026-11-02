@@ -44,7 +44,8 @@ jobs:
         run: |
           cp -r extension "$RUNNER_TEMP/openingshub-autofill"
           rm -rf "$RUNNER_TEMP/openingshub-autofill/test"
-          (cd "$RUNNER_TEMP" && zip -qr "$GITHUB_WORKSPACE/frontend/out/openingshub-autofill.zip" openingshub-autofill)
+          # files at the top of the zip: "Extract All" then gives one folder with manifest.json directly inside
+          (cd "$RUNNER_TEMP/openingshub-autofill" && zip -qr "$GITHUB_WORKSPACE/frontend/out/openingshub-autofill.zip" .)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/out
