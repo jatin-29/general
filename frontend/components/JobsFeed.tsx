@@ -11,7 +11,7 @@ import ApplyKit from "./ApplyKit";
 import { DONE_APPLYING, STATUSES, followUpBadge, loadTracker, saveTracker, withStatus, type Status, type Track, type Tracker } from "@/lib/tracker";
 import { useToast } from "./Toast";
 import JobCalendar from "./JobCalendar";
-import { dayLabel, jobDay, jobTime } from "@/lib/days";
+import { dayKey, dayLabel, jobDay, jobTime } from "@/lib/days";
 import { RETRY_MS, TokenRejected, dispatchDelete, getPending, getToken, remoteDeleteAvailable, setPending } from "@/lib/remote";
 
 const PAGE = 24;
@@ -171,7 +171,9 @@ export default function JobsFeed() {
   const [quick, setQuick] = useState<Quick>("all");
   const [hideApplied, setHideApplied] = useState(false);
   const [showRejected, setShowRejected] = useState(false); // rejected jobs are hidden unless you open this list
-  const [day, setDay] = useState(""); // "2026-11-01": only that day's jobs
+  const [today] = useState(() => dayKey(new Date()));
+  const [day, setDay] = useState(today); // the day being shown ("2026-11-01"); "" = every date
+  const [calOpen, setCalOpen] = useState(false); // phones: calendar under the day bar
   const [tracker, setTrackerState] = useState<Tracker>({});
   const [kitJob, setKitJob] = useState<Job | null>(null);
   const [lastVisit, setLastVisit] = useState<number>(0);
@@ -347,9 +349,21 @@ export default function JobsFeed() {
     for (const j of filtered) c[jobDay(j)] = (c[jobDay(j)] ?? 0) + 1;
     return c;
   }, [filtered]);
-  const visible = useMemo(() => (day ? filtered.filter((j) => jobDay(j) === day) : filtered), [filtered, day]);
+  // One day at a time (today first). Searching and the New / Closing soon / My applications counters look at every date.
+  const searching = search.trim() !== "";
+  const shownDay = searching || quick !== "all" ? "" : day;
+  const visible = useMemo(() => (shownDay ? filtered.filter((j) => jobDay(j) === shownDay) : filtered), [filtered, shownDay]);
+  const jobDays = useMemo(() => Object.keys(perDay).sort(), [perDay]);
+  const prevDay = shownDay ? jobDays.filter((k) => k < shownDay).pop() : undefined; // skips days without jobs
+  const nextDay = shownDay ? jobDays.find((k) => k > shownDay) ?? (shownDay < today ? today : undefined) : undefined;
+  const pickDay = (k: string) => {
+    setSearch("");
+    setQuick("all");
+    setDay(k);
+    setCalOpen(false);
+  };
 
-  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected, day]);
+  useEffect(() => setShown(PAGE), [search, source, quick, hideApplied, showRejected, shownDay]);
   useEffect(() => {
     if (showRejected && rejected.length === 0) setShowRejected(false);
   }, [showRejected, rejected.length]);
@@ -399,7 +413,7 @@ export default function JobsFeed() {
             <Tile label="New" n={counts.fresh} tone="rose" active={quick === "new"} onClick={tile("new")} delay={500} glyph={Star} />
             <Tile label="Closing soon" n={counts.soon} tone="blue" active={quick === "soon"} onClick={tile("soon")} delay={600} glyph={Clock} />
             <Tile label="My applications" n={counts.mine} tone="green" active={quick === "mine"} onClick={tile("mine")} delay={650} glyph={Check} />
-            <Tile label="All jobs" n={counts.total} tone="brand" active={quick === "all" && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
+            <Tile label="All jobs" n={counts.total} tone="brand" active={quick === "all" && !day && !searching && !showRejected} onClick={() => { setShowRejected(false); setDay(""); setQuick("all"); }} delay={700} glyph={Grid} />
             <button className="round-add mt-[2.7rem] animate-[fade-up_.8s_.8s_both] sm:mt-[3.3rem]" aria-label="Add a job manually" title="Add a job or company by hand" onClick={() => setAdding(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
@@ -441,9 +455,38 @@ export default function JobsFeed() {
           </label>
         </div>
 
-        <div className="mb-5 lg:hidden">
-          <JobCalendar counts={perDay} value={day} onChange={setDay} />
-        </div>
+        {shownDay ? (
+          <div className="card mb-5 flex items-center justify-between gap-2 p-2">
+            <button className="btn-ghost !px-3" disabled={!prevDay} onClick={() => prevDay && setDay(prevDay)} aria-label="Previous day">
+              ‹<span className="hidden sm:inline">{prevDay ? dayLabel(prevDay) : "Earlier"}</span>
+            </button>
+            <div className="min-w-0 text-center">
+              <button className="font-display text-lg font-bold lg:pointer-events-none" onClick={() => setCalOpen(!calOpen)} aria-expanded={calOpen} aria-label="Pick a date">
+                <span data-testid="day-title">{dayLabel(shownDay)}</span>
+                <span className="ml-1 text-sm lg:hidden" aria-hidden="true">📅</span>
+              </button>
+              <div className="on-bg-muted text-xs font-semibold">
+                {perDay[shownDay] ?? 0} job{perDay[shownDay] === 1 ? "" : "s"}
+                {shownDay !== today && <> · <button className="underline" onClick={() => setDay(today)}>Back to today</button></>}
+              </div>
+            </div>
+            <button className="btn-ghost !px-3" disabled={!nextDay} onClick={() => nextDay && setDay(nextDay)} aria-label="Next day">
+              <span className="hidden sm:inline">{nextDay ? dayLabel(nextDay) : "Later"}</span>›
+            </button>
+          </div>
+        ) : (
+          <p className="on-bg-muted mb-3 text-xs font-semibold">
+            {searching ? "Searching every date." : quick !== "all" ? "From every date." : "Every date, newest first."}{" "}
+            <button className="underline" onClick={() => { setSearch(""); setQuick("all"); setDay(today); }}>Show today only</button>
+            <button className="ml-2 underline lg:hidden" onClick={() => setCalOpen(!calOpen)}>Pick a date</button>
+          </p>
+        )}
+
+        {calOpen && (
+          <div className="mb-5 lg:hidden">
+            <JobCalendar counts={perDay} value={shownDay} onChange={pickDay} alwaysOpen />
+          </div>
+        )}
 
         {error && !jobs ? (
           <div className="card flex flex-col items-center gap-3 p-10 text-center">
@@ -452,6 +495,16 @@ export default function JobsFeed() {
           </div>
         ) : !jobs && manual.length === 0 ? (
           <div className="grid gap-4 xl:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card skeleton h-40" />)}</div>
+        ) : visible.length === 0 && shownDay && filtered.length > 0 ? (
+          <div className="card p-10 text-center">
+            <p className="font-display text-xl font-bold">{shownDay === today ? "No new jobs yet today" : `No jobs on ${dayLabel(shownDay)}`}</p>
+            <p className="mt-1 text-sm text-slate-500">New posts arrive every 15 minutes.</p>
+            {(prevDay ?? nextDay) && (
+              <button className="btn-primary mt-4" onClick={() => setDay((prevDay ?? nextDay)!)}>
+                See {dayLabel((prevDay ?? nextDay)!)} · {perDay[(prevDay ?? nextDay)!] ?? 0} job{perDay[(prevDay ?? nextDay)!] === 1 ? "" : "s"}
+              </button>
+            )}
+          </div>
         ) : visible.length === 0 ? (
           <div className="card p-12 text-center">
             <p className="font-display text-xl font-bold">{all.length === 0 ? "No jobs yet" : "No jobs match"}</p>
@@ -465,7 +518,7 @@ export default function JobsFeed() {
               const d = jobDay(j);
               return (
                 <Fragment key={j.id}>
-                  {(i === 0 || jobDay(list[i - 1]) !== d) && (
+                  {!shownDay && (i === 0 || jobDay(list[i - 1]) !== d) && (
                     <h3 className="col-span-full -mb-1 mt-2 flex items-baseline gap-2 font-display on-bg text-lg font-bold first:mt-0" data-testid="day-heading">
                       {dayLabel(d)}
                       <span className="on-bg-muted font-sans text-xs font-bold">{perDay[d] ?? 0} job{perDay[d] === 1 ? "" : "s"}</span>
@@ -482,7 +535,7 @@ export default function JobsFeed() {
         )}
         </div>
         <aside className="hidden lg:sticky lg:top-4 lg:block lg:self-start">
-          <JobCalendar counts={perDay} value={day} onChange={setDay} />
+          <JobCalendar counts={perDay} value={shownDay} onChange={pickDay} />
         </aside>
         </div>
       </section>

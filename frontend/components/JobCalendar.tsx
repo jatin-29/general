@@ -6,7 +6,7 @@ import { dayKey, dayLabel, monthStart } from "@/lib/days";
 const WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 
 /** Month view with how many jobs came in each day; pick a day to see only its jobs. */
-export default function JobCalendar({ counts, value, onChange }: { counts: Record<string, number>; value: string; onChange: (day: string) => void }) {
+export default function JobCalendar({ counts, value, onChange, alwaysOpen }: { counts: Record<string, number>; value: string; onChange: (day: string) => void; alwaysOpen?: boolean }) {
   const latest = Object.keys(counts).sort().pop();
   const [month, setMonth] = useState(() => monthStart(value || latest || dayKey(new Date())));
   const [open, setOpen] = useState(false); // phones: folded until you ask for it
@@ -23,11 +23,11 @@ export default function JobCalendar({ counts, value, onChange }: { counts: Recor
 
   return (
     <div className="card p-3">
-      <button className="flex w-full items-center justify-between gap-2 px-1 py-1 text-sm font-bold lg:hidden" onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button className={`flex w-full items-center justify-between gap-2 px-1 py-1 text-sm font-bold lg:hidden ${alwaysOpen ? "hidden" : ""}`} onClick={() => setOpen(!open)} aria-expanded={open}>
         <span>📅 {value ? `${dayLabel(value)} · ${counts[value] ?? 0} jobs` : "Pick a date"}</span>
         <span aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      <div className={`${open ? "block" : "hidden"} lg:block`}>
+      <div className={`${open || alwaysOpen ? "block" : "hidden"} lg:block`}>
         <div className="mb-2 flex items-center justify-between gap-2 px-1 pt-1">
           <button className="grid h-8 w-8 place-items-center rounded-full font-black hover:bg-slate-500/15" onClick={() => go(-1)} aria-label="Previous month">‹</button>
           <div className="text-center">

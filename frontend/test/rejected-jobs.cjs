@@ -5,7 +5,8 @@ const assert = require("assert/strict");
 const fs = require("fs"), path = require("path");
 const OUT = path.resolve(__dirname, "../out");
 const T = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2" };
-const job = (id, text) => ({ id, fingerprint: id, source: "Premium Membership", text, apply_link: null, post_url: null, posted_at: "2026-10-29T06:00:00Z", added_at: "2026-10-29T06:00:00Z" });
+const now = new Date().toISOString(); // posted today: the page opens on today's jobs
+const job = (id, text) => ({ id, fingerprint: id, source: "Premium Membership", text, apply_link: null, post_url: null, posted_at: now, added_at: now });
 const DATA = JSON.stringify({ updated_at: "2026-10-29T08:00:00Z", jobs: [job("aaa111aaa111", "HR Recruiter at AcquireX"), job("bbb222bbb222", "Business Analyst Trainee at BrowseInfo"), job("ccc333ccc333", "SDE Intern at Zeta")] });
 (async () => {
   const b = await chromium.launch();
