@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
     Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
-    is_sde_job, parse_wa, repost_text, wa_signals,
+    batch_match, job_category, parse_wa, repost_text, wa_signals,
 )
 
 log = logging.getLogger("alerts")
@@ -334,16 +334,40 @@ async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | No
     return new
 
 
-# ---------------------------------------------------------------- your job channel
-async def create_channel(client, title: str):
-    """Make a private broadcast channel on your account; returns (channel, invite link)."""
+# ---------------------------------------------------------------- your job group (one topic per role type)
+async def create_group(client, title: str, about: str):
+    """A private supergroup with Topics, read-only for members; returns (group, invite link)."""
     from telethon.tl.functions.channels import CreateChannelRequest
-    from telethon.tl.functions.messages import ExportChatInviteRequest
+    from telethon.tl.functions.messages import EditChatDefaultBannedRightsRequest, ExportChatInviteRequest
+    from telethon.tl.types import ChatBannedRights
 
-    res = await client(CreateChannelRequest(title=title, about="Job and internship openings, collected automatically.", broadcast=True))
-    channel = res.chats[0]
-    link = (await client(ExportChatInviteRequest(peer=channel))).link
-    return channel, link
+    res = await client(CreateChannelRequest(title=title, about=about, megagroup=True, forum=True))
+    group = res.chats[0]
+    # members read; only you (the owner) post and make topics
+    await client(EditChatDefaultBannedRightsRequest(peer=group, banned_rights=ChatBannedRights(until_date=None, send_messages=True, manage_topics=True)))
+    link = (await client(ExportChatInviteRequest(peer=group))).link
+    return group, link
+
+
+async def create_topic(client, group, title: str) -> int:
+    """Add a topic and return its id (the id of the "topic created" message)."""
+    import random
+
+    from telethon.tl.functions.messages import CreateForumTopicRequest
+
+    res = await client(CreateForumTopicRequest(peer=group, title=title, random_id=random.randrange(1, 2**62)))
+    for u in getattr(res, "updates", []):
+        m = getattr(u, "message", None)
+        if m is not None and type(getattr(m, "action", None)).__name__ == "MessageActionTopicCreate":
+            return m.id
+    return next(u.id for u in getattr(res, "updates", []) if type(u).__name__ == "UpdateMessageID")
+
+
+async def existing_topics(client, group) -> dict[str, int]:
+    from telethon.tl.functions.messages import GetForumTopicsRequest
+
+    res = await client(GetForumTopicsRequest(peer=group, offset_date=None, offset_id=0, offset_topic=0, limit=100))
+    return {t.title: t.id for t in getattr(res, "topics", []) if getattr(t, "title", None)}
 
 
 async def rename_channel(client, channel, title: str):
@@ -352,49 +376,59 @@ async def rename_channel(client, channel, title: str):
     await client(EditTitleRequest(channel=channel, title=title))
 
 
-async def find_repost_channel(client, state: State, cfg: Config):
+async def find_repost_group(client, state: State, cfg: Config):
+    """Your job group, made on the first run (and renamed if repost_title changes)."""
     ref = (cfg.repost_channel or "").strip()
     if ref.lower() != "auto":
         return await client.get_entity(clean_ref(ref))
     async for d in client.iter_dialogs(limit=300):
         e = d.entity
-        if getattr(e, "broadcast", False) and (e.id == state.repost_id or (getattr(e, "creator", False) and getattr(e, "title", "") == cfg.repost_title)):
-            state.repost_id = e.id
-            if getattr(e, "title", "") != cfg.repost_title:  # repost_title changed in config.toml: rename the channel
+        if getattr(e, "megagroup", False) and getattr(e, "forum", False) and (e.id == state.repost_gid or (getattr(e, "creator", False) and getattr(e, "title", "") == cfg.repost_title)):
+            state.repost_gid = e.id
+            if getattr(e, "title", "") != cfg.repost_title:
                 await rename_channel(client, e, cfg.repost_title)
-                log.info("repost: renamed the channel to %r", cfg.repost_title)
+                log.info("repost: renamed the group to %r", cfg.repost_title)
             state.repost_title = cfg.repost_title
             return e
-    channel, link = await create_channel(client, cfg.repost_title)
-    state.repost_id = channel.id
-    state.repost_title = cfg.repost_title
-    await client.send_message("me", f"📢 Your job channel \"{cfg.repost_title}\" is ready. New jobs will be posted there.\nInvite link: {link}", link_preview=False)
-    log.info("repost: created the channel %r", cfg.repost_title)
-    return channel
+    about = f"{', '.join(cfg.repost_categories)} openings" + (f" for the {cfg.repost_batch} batch" if cfg.repost_batch else "") + ", collected automatically."
+    group, link = await create_group(client, cfg.repost_title, about)
+    state.repost_gid, state.repost_title, state.repost_topics = group.id, cfg.repost_title, {}
+    await client.send_message("me", f"📢 Your job group \"{cfg.repost_title}\" is ready, with a topic for each role type. Members can read; only you post.\nInvite link: {link}", link_preview=False)
+    log.info("repost: created the group %r", cfg.repost_title)
+    return group
+
+
+async def topic_for(client, group, state: State, category: str) -> int:
+    if category not in state.repost_topics:
+        known = await existing_topics(client, group)
+        state.repost_topics[category] = known.get(category) or await create_topic(client, group, category)
+    return state.repost_topics[category]
 
 
 async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store: JobStore | None = None) -> int:
-    """Post new jobs (oldest first) to your channel, a few per run, spaced out. Returns how many were posted."""
+    """Post new jobs (oldest first) into their topic in your job group, a few per run. Returns how many were posted."""
     skip = {s.strip().lower() for s in cfg.repost_skip}
     only = [s.strip().lower() for s in cfg.repost_sources if s.strip()]
-
-    def wanted(j: dict) -> bool:
+    for j in new_jobs:
         src = j["source"].strip().lower()
-        return src not in skip and (not only or any(src.startswith(o) for o in only)) and (not cfg.repost_sde_only or is_sde_job(j["text"]))
-
-    state.repost_queue += [
-        {"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"]}
-        for j in new_jobs if wanted(j)
-    ]
-    if not state.repost_queue and state.repost_id and not state.repost_title_pending(cfg.repost_title):
+        if src in skip or (only and not any(src.startswith(o) for o in only)) or not batch_match(j["text"], cfg.repost_batch):
+            continue
+        category = job_category(j["text"], cfg.repost_categories)
+        if category:
+            state.repost_queue.append({"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"], "category": category})
+    if not state.repost_queue and state.repost_gid and not state.repost_title_pending(cfg.repost_title):
         return 0
-    channel = await find_repost_channel(client, state, cfg)  # the first run makes the channel right away
+    group = await find_repost_group(client, state, cfg)  # the first run makes the group right away
+    if not state.repost_topics:
+        for c in cfg.repost_categories:  # all topics up front, in your order
+            await topic_for(client, group, state, c)
     sent = 0
     while state.repost_queue and sent < cfg.repost_per_run:
         job = state.repost_queue[0]
         if store is None or job["fingerprint"] not in store.deleted:  # deleted on the website: don't post
             try:
-                await client.send_message(channel, repost_text(job), link_preview=False)
+                topic = await topic_for(client, group, state, job.get("category") or cfg.repost_categories[0])
+                await client.send_message(group, repost_text(job), link_preview=False, reply_to=topic)
             except Exception as e:
                 if type(e).__name__ == "FloodWaitError":
                     log.warning("repost: Telegram asked to slow down; %d job(s) wait for the next run", len(state.repost_queue))
@@ -403,7 +437,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
             sent += 1
             await asyncio.sleep(3 if sent < cfg.repost_per_run else 0)
         state.repost_queue.pop(0)
-    log.info("repost: posted %d job(s) to your channel, %d waiting", sent, len(state.repost_queue))
+    log.info("repost: posted %d job(s) to your group, %d waiting", sent, len(state.repost_queue))
     return sent
 
 

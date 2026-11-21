@@ -502,41 +502,80 @@ def test_whatsapp_rescan_brings_back_skipped_posts():
     assert store.jobs[0]["source"] == "WhatsApp · Jobs" and state.wa_groups == ["Jobs"]
 
 
-# ---------------------------------------------------------------- your job channel
-def test_repost_creates_channel_once_and_skips_paid_group(monkeypatch):
+# ---------------------------------------------------------------- your job group (topics per role type)
+def test_role_types_and_batch():
+    from core import batch_match, job_category
+
+    cats = ["SDE", "AI/ML", "Data Science", "Analyst", "Product"]
+    cases = {
+        "Amazon hiring SDE-1, 2027 batch": "SDE",
+        "Backend Developer (Node.js) at Zeta": "SDE",
+        "ML Engineer Intern at Sarvam AI": "AI/ML",
+        "Generative AI intern, LLM fine-tuning": "AI/ML",
+        "Data Scientist Intern | 2027 grads": "Data Science",
+        "Business Analyst at Kappa": "Analyst",
+        "Data Analyst trainee": "Analyst",
+        "Associate Product Manager (APM) – Flipkart": "Product",
+        "Software Engineer at an AI startup": "SDE",  # the title line decides
+        "Business Development Executive": None,
+        "HR Recruiter at AcquireX": None,
+    }
+    for text, want in cases.items():
+        assert job_category(text, cats) == want, text
+    assert job_category("Data Analyst trainee", ["SDE"]) is None
+    for t in ["2027 batch", "Batch: 2025/2026/2027", "2k27 grads", "for '27 passouts", "27 batch only"]:
+        assert batch_match(t, "2027"), t
+    for t in ["2026 batch", "5 years experience", "Hiring freshers"]:
+        assert not batch_match(t, "2027"), t
+    assert batch_match("anything", "")
+
+
+def test_repost_makes_group_with_topics_and_files_jobs(monkeypatch):
     from core import make_job
 
-    sent = []
+    sent, made_groups, topics = [], [], []
 
     class Client(FakeTelegram):
-        async def send_message(self, to, text, link_preview=True):
-            sent.append((to, text))
+        async def send_message(self, to, text, link_preview=True, reply_to=None):
+            sent.append((to, text, reply_to))
 
-    made = []
+    async def fake_group(client, title, about):
+        g = SimpleNamespace(id=777, title=title, megagroup=True, forum=True, creator=True)
+        made_groups.append(g)
+        client.chats["@g"] = (g, [])
+        return g, "https://t.me/+grp"
 
-    async def fake_create(client, title):
-        ch = SimpleNamespace(id=555, title=title, broadcast=True, creator=True)
-        made.append(ch)
-        client.chats["@ch"] = (ch, [])
-        return ch, "https://t.me/+abc"
+    async def fake_topic(client, group, title):
+        topics.append(title)
+        return 100 + len(topics)
 
-    monkeypatch.setattr(run, "create_channel", fake_create)
-    async def no_wait(_seconds):
+    async def no_topics(client, group):
+        return {}
+
+    async def no_wait(_s):
         return None
 
+    monkeypatch.setattr(run, "create_group", fake_group)
+    monkeypatch.setattr(run, "create_topic", fake_topic)
+    monkeypatch.setattr(run, "existing_topics", no_topics)
     monkeypatch.setattr(run.asyncio, "sleep", no_wait)
-    store, state, cfg = JobStore(password="pw"), State(), Config(repost_channel="auto", repost_skip=["Premium Membership"])
-    jobs = [make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern, 2026 batch https://zeta.io/jobs/1", None),
-            make_job("Premium Membership", "Paid group job https://x.io/1", None)]
+    store, state = JobStore(password="pw"), State()
+    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_batch="2027")
+    jobs = [
+        make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern, 2027 batch https://zeta.io/1", None),
+        make_job("Premium Membership", "Data Scientist Intern | 2027 grads https://k.io/2", None),
+        make_job("Premium Membership", "Backend Developer, 2026 batch https://k.io/3", None),  # wrong batch
+        make_job("Saved Messages", "SDE intern 2027 batch https://b.io/4", None),  # not a chosen source
+        make_job("WhatsApp · X", "HR Recruiter, 2027 batch https://h.io/5", None),  # not a tech role
+    ]
     tg = Client({})
-    assert run_async(run.repost(tg, state, cfg, jobs, store)) == 1
-    assert len(made) == 1 and state.repost_id == 555
-    assert sent[0][0] == "me" and "t.me/+abc" in sent[0][1]  # invite link to Saved Messages
-    post = sent[1][1]
-    assert sent[1][0] is made[0] and post.startswith("💼 Zeta hiring SDE Intern") and "#internship" in post and "#fresher" in post
-    # next run finds the same channel instead of making another
-    assert run_async(run.repost(tg, state, cfg, [make_job("WhatsApp · X", "Kappa hiring analyst, freshers https://k.io/2", None)], store)) == 1
-    assert len(made) == 1
+    assert run_async(run.repost(tg, state, cfg, jobs, store)) == 2
+    assert len(made_groups) == 1 and topics == ["SDE", "AI/ML", "Data Science", "Analyst", "Product"]
+    assert sent[0][0] == "me" and "t.me/+grp" in sent[0][1]
+    assert [(m[1].split("\n")[0], m[2]) for m in sent[1:]] == [("💼 Zeta hiring SDE Intern, 2027 batch", 101), ("💼 Data Scientist Intern | 2027 grads", 103)]
+    # next run: same group, same topics
+    assert run_async(run.repost(tg, state, cfg, [make_job("WhatsApp · X", "Product Analyst intern, 2027 batch https://p.io/6", None)], store)) == 1
+    assert len(made_groups) == 1 and len(topics) == 5 and sent[-1][2] == 105
 
 
 def test_repost_text_shortens_and_links():
@@ -544,41 +583,3 @@ def test_repost_text_shortens_and_links():
 
     t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 400, "apply_link": "https://acme.com/a"})
     assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 1200
-
-
-def test_repost_sde_only_from_chosen_sources_and_rename(monkeypatch):
-    from core import is_sde_job, make_job
-
-    for t in ["Amazon hiring SDE-1, 2026 batch", "Backend Developer (Node.js) at Zeta", "Software Engineer Intern - Google", "React developer, Pune"]:
-        assert is_sde_job(t), t
-    for t in ["Business Development Executive", "HR Recruiter at AcquireX", "Data Analyst trainee", "Sales intern"]:
-        assert not is_sde_job(t), t
-
-    sent, renamed = [], []
-
-    class Client(FakeTelegram):
-        async def send_message(self, to, text, link_preview=True):
-            sent.append(text)
-
-    async def fake_rename(client, ch, title):
-        renamed.append(title)
-        ch.title = title
-
-    async def no_wait(_s):
-        return None
-
-    monkeypatch.setattr(run, "rename_channel", fake_rename)
-    monkeypatch.setattr(run.asyncio, "sleep", no_wait)
-    ch = SimpleNamespace(id=555, title="OpeningsHub Jobs", broadcast=True, creator=True)
-    tg = Client({"@ch": (ch, [])})
-    state = State()
-    state.repost_id = 555
-    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_sde_only=True)
-    jobs = [make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern https://zeta.io/1", None),
-            make_job("Premium Membership", "Backend Developer at Kappa https://k.io/2", None),
-            make_job("Premium Membership", "HR Recruiter at AcquireX https://a.io/3", None),
-            make_job("Saved Messages", "Frontend developer at Beta https://b.io/4", None)]
-    assert run_async(run.repost(tg, state, cfg, jobs, JobStore(password="pw"))) == 2
-    assert renamed == ["Job Posts"] and len(sent) == 2 and "Zeta" in sent[0] and "Kappa" in sent[1]
-    # renamed once; nothing new next time and no second rename
-    assert run_async(run.repost(tg, state, cfg, [], JobStore(password="pw"))) == 0 and renamed == ["Job Posts"]

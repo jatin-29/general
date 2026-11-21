@@ -32,7 +32,9 @@ class Config:
     repost_title: str = "OpeningsHub Jobs"
     repost_skip: list[str] = field(default_factory=list)  # job sources never reposted (e.g. a paid group)
     repost_sources: list[str] = field(default_factory=list)  # if set, only sources starting with one of these
-    repost_sde_only: bool = False  # only software developer roles
+    # Role types, one topic each (a job that fits none is not posted), and the batch it must mention ("" = any)
+    repost_categories: list[str] = field(default_factory=lambda: ["SDE", "AI/ML", "Data Science", "Analyst", "Product"])
+    repost_batch: str = ""
     repost_per_run: int = 15
 
 
@@ -127,7 +129,9 @@ class State:
         self.wa_groups: list[str] = d.get("wa_groups", [])  # WhatsApp chats that have posted jobs
         self.repost_id: int = d.get("repost_id", 0)  # your job channel
         self.repost_queue: list[dict] = d.get("repost_queue", [])  # jobs waiting to be posted there
-        self.repost_title: str = d.get("repost_title", "")  # the channel's name as last set
+        self.repost_title: str = d.get("repost_title", "")  # the group's name as last set
+        self.repost_gid: int = d.get("repost_gid", 0)  # your job group (with topics)
+        self.repost_topics: dict[str, int] = d.get("repost_topics", {})  # role type -> topic id
 
     def repost_title_pending(self, wanted: str) -> bool:
         return bool(wanted) and self.repost_title != wanted
@@ -236,6 +240,36 @@ NOT_SDE = re.compile(r"\bbusiness development|\bbde\b|sales|marketing|\bhr\b|rec
 
 def is_sde_job(text: str) -> bool:
     return bool(SDE_ROLE.search(text)) and not NOT_SDE.search(text[:200])
+
+
+ROLE_TYPES = {
+    "Product": re.compile(r"\b(product (?:manager|management|analyst|intern|associate|owner|designer)s?|apm|associate product)\b", re.I),
+    "Data Science": re.compile(r"\b(data scien\w*|data engineer\w*)\b", re.I),
+    "AI/ML": re.compile(r"\b(ai|ml|ai/ml|artificial intelligence|machine learning|deep learning|nlp|computer vision|gen ?ai|generative ai|llms?|mlops)\b", re.I),
+    "Analyst": re.compile(r"\b(analysts?|analytics)\b", re.I),
+}
+NOT_TECH = re.compile(r"\bbusiness development|\bbde\b|\bsales\b|telesales|marketing|\bhr\b|recruiter|real estate", re.I)
+
+
+def job_category(text: str, wanted: list[str]) -> str | None:
+    """Which role type (topic) a post belongs to: the title line decides first, then the start of the post."""
+    if NOT_TECH.search(text[:200]):
+        return None
+    first = next((l for l in text.splitlines() if l.strip()), "")
+    rules = [(n, rx) for n, rx in ROLE_TYPES.items() if n in wanted] + ([("SDE", SDE_ROLE)] if "SDE" in wanted else [])
+    for part in (first, text[:600]):
+        hits = [(m.start(), i, name) for i, (name, rx) in enumerate(rules) if (m := rx.search(part))]
+        if hits:
+            return min(hits)[2]  # the role named first ("Software Engineer at an AI startup" is SDE)
+    return None
+
+
+def batch_match(text: str, batch: str) -> bool:
+    """Does the post name this batch ("2027", "2k27", "'27 batch", "27 batch")?"""
+    if not batch:
+        return True
+    yy = batch[-2:]
+    return re.search(rf"\b{batch}\b|\b2k{yy}\b|['’]{yy}\b|\b{yy}\s*(?:batch|pass ?out|grads?)\b", text, re.I) is not None
 
 
 def repost_text(job: dict) -> str:
