@@ -31,6 +31,8 @@ class Config:
     repost_channel: str = ""
     repost_title: str = "OpeningsHub Jobs"
     repost_skip: list[str] = field(default_factory=list)  # job sources never reposted (e.g. a paid group)
+    repost_sources: list[str] = field(default_factory=list)  # if set, only sources starting with one of these
+    repost_sde_only: bool = False  # only software developer roles
     repost_per_run: int = 15
 
 
@@ -125,6 +127,10 @@ class State:
         self.wa_groups: list[str] = d.get("wa_groups", [])  # WhatsApp chats that have posted jobs
         self.repost_id: int = d.get("repost_id", 0)  # your job channel
         self.repost_queue: list[dict] = d.get("repost_queue", [])  # jobs waiting to be posted there
+        self.repost_title: str = d.get("repost_title", "")  # the channel's name as last set
+
+    def repost_title_pending(self, wanted: str) -> bool:
+        return bool(wanted) and self.repost_title != wanted
 
     @classmethod
     def load(cls, path: str | Path) -> "State":
@@ -216,6 +222,20 @@ _FRESHER = re.compile(r"\b(freshers?|entry[- ]level|no (?:prior )?experience|new
 _HINT = re.compile(r"\b(trainees?|off[- ]?campus|batch(?:es)?|pass ?outs?|graduat\w*)\b", re.I)
 _INTERN = re.compile(r"\b(internships?|interns?)\b", re.I)
 _SENIOR = re.compile(r"\b(senior|sr\.|lead|principal|manager|director|architect|[2-9]\s*\+?\s*(?:-\s*\d+\s*)?(?:yrs?|years?))\b", re.I)
+
+
+# Software developer roles (and not "business development", HR, analyst… posts).
+SDE_ROLE = re.compile(
+    r"\b(sde|swe|software (?:development )?(?:engineer|developer)|(?:backend|back-end|frontend|front-end|full[- ]?stack|web|mobile|"
+    r"app|android|ios|flutter|react(?:\.js)?|angular|node(?:\.js)?|java|python|golang|go|\.net|php|mern|mean|ruby|rust|c\+\+|"
+    r"blockchain|game|embedded|cloud|devops)\s*(?:developer|engineer|dev)s?|developers?|programmer|coder)\b",
+    re.I,
+)
+NOT_SDE = re.compile(r"\bbusiness development|\bbde\b|sales|marketing|\bhr\b|recruiter|real estate developer", re.I)
+
+
+def is_sde_job(text: str) -> bool:
+    return bool(SDE_ROLE.search(text)) and not NOT_SDE.search(text[:200])
 
 
 def repost_text(job: dict) -> str:

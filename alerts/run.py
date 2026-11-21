@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
     Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
-    parse_wa, repost_text, wa_signals,
+    is_sde_job, parse_wa, repost_text, wa_signals,
 )
 
 log = logging.getLogger("alerts")
@@ -346,6 +346,12 @@ async def create_channel(client, title: str):
     return channel, link
 
 
+async def rename_channel(client, channel, title: str):
+    from telethon.tl.functions.channels import EditTitleRequest
+
+    await client(EditTitleRequest(channel=channel, title=title))
+
+
 async def find_repost_channel(client, state: State, cfg: Config):
     ref = (cfg.repost_channel or "").strip()
     if ref.lower() != "auto":
@@ -354,9 +360,14 @@ async def find_repost_channel(client, state: State, cfg: Config):
         e = d.entity
         if getattr(e, "broadcast", False) and (e.id == state.repost_id or (getattr(e, "creator", False) and getattr(e, "title", "") == cfg.repost_title)):
             state.repost_id = e.id
+            if getattr(e, "title", "") != cfg.repost_title:  # repost_title changed in config.toml: rename the channel
+                await rename_channel(client, e, cfg.repost_title)
+                log.info("repost: renamed the channel to %r", cfg.repost_title)
+            state.repost_title = cfg.repost_title
             return e
     channel, link = await create_channel(client, cfg.repost_title)
     state.repost_id = channel.id
+    state.repost_title = cfg.repost_title
     await client.send_message("me", f"📢 Your job channel \"{cfg.repost_title}\" is ready. New jobs will be posted there.\nInvite link: {link}", link_preview=False)
     log.info("repost: created the channel %r", cfg.repost_title)
     return channel
@@ -365,11 +376,17 @@ async def find_repost_channel(client, state: State, cfg: Config):
 async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store: JobStore | None = None) -> int:
     """Post new jobs (oldest first) to your channel, a few per run, spaced out. Returns how many were posted."""
     skip = {s.strip().lower() for s in cfg.repost_skip}
+    only = [s.strip().lower() for s in cfg.repost_sources if s.strip()]
+
+    def wanted(j: dict) -> bool:
+        src = j["source"].strip().lower()
+        return src not in skip and (not only or any(src.startswith(o) for o in only)) and (not cfg.repost_sde_only or is_sde_job(j["text"]))
+
     state.repost_queue += [
         {"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"]}
-        for j in new_jobs if j["source"].strip().lower() not in skip
+        for j in new_jobs if wanted(j)
     ]
-    if not state.repost_queue and state.repost_id:
+    if not state.repost_queue and state.repost_id and not state.repost_title_pending(cfg.repost_title):
         return 0
     channel = await find_repost_channel(client, state, cfg)  # the first run makes the channel right away
     sent = 0

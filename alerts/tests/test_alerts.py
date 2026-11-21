@@ -544,3 +544,41 @@ def test_repost_text_shortens_and_links():
 
     t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 400, "apply_link": "https://acme.com/a"})
     assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 1200
+
+
+def test_repost_sde_only_from_chosen_sources_and_rename(monkeypatch):
+    from core import is_sde_job, make_job
+
+    for t in ["Amazon hiring SDE-1, 2026 batch", "Backend Developer (Node.js) at Zeta", "Software Engineer Intern - Google", "React developer, Pune"]:
+        assert is_sde_job(t), t
+    for t in ["Business Development Executive", "HR Recruiter at AcquireX", "Data Analyst trainee", "Sales intern"]:
+        assert not is_sde_job(t), t
+
+    sent, renamed = [], []
+
+    class Client(FakeTelegram):
+        async def send_message(self, to, text, link_preview=True):
+            sent.append(text)
+
+    async def fake_rename(client, ch, title):
+        renamed.append(title)
+        ch.title = title
+
+    async def no_wait(_s):
+        return None
+
+    monkeypatch.setattr(run, "rename_channel", fake_rename)
+    monkeypatch.setattr(run.asyncio, "sleep", no_wait)
+    ch = SimpleNamespace(id=555, title="OpeningsHub Jobs", broadcast=True, creator=True)
+    tg = Client({"@ch": (ch, [])})
+    state = State()
+    state.repost_id = 555
+    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_sde_only=True)
+    jobs = [make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern https://zeta.io/1", None),
+            make_job("Premium Membership", "Backend Developer at Kappa https://k.io/2", None),
+            make_job("Premium Membership", "HR Recruiter at AcquireX https://a.io/3", None),
+            make_job("Saved Messages", "Frontend developer at Beta https://b.io/4", None)]
+    assert run_async(run.repost(tg, state, cfg, jobs, JobStore(password="pw"))) == 2
+    assert renamed == ["Job Posts"] and len(sent) == 2 and "Zeta" in sent[0] and "Kappa" in sent[1]
+    # renamed once; nothing new next time and no second rename
+    assert run_async(run.repost(tg, state, cfg, [], JobStore(password="pw"))) == 0 and renamed == ["Job Posts"]
