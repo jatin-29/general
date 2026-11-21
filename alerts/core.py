@@ -345,15 +345,16 @@ def repost_text(job: dict) -> str:
     """A job as posted in your group: title line, tags, the post (shortened, without its source), apply link."""
     text = clean_post(job["text"]) or job["text"].strip()
     first = next((l.strip() for l in text.splitlines() if l.strip()), "Job opening")
-    title = re.sub(r"https?://\S+", "", first).strip()[:120] or "Job opening"
+    title = re.sub(r"https?://\S+", "", first)
+    title = re.sub(r"^[\W_]*\d{1,2}\s*[.)]\s*", "", title).strip()[:120] or "Job opening"  # "4) Company - Beroe" -> "Company - Beroe"
     tags = []
     if _INTERN.search(text):
         tags.append("#internship")
     if _FRESHER.search(text) or (_HINT.search(text) and not _SENIOR.search(text)):
         tags.append("#fresher")
     rest = text[len(first):].strip()
-    if len(rest) > 900:
-        rest = rest[:900].rsplit(" ", 1)[0] + "…"
+    if len(rest) > 3600:  # Telegram allows 4096 characters: only a really long post is shortened
+        rest = rest[:3600].rsplit(" ", 1)[0] + "…"
     parts = [f"💼 {title}"]
     if tags:
         parts.append(" ".join(tags))

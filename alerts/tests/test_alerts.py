@@ -588,8 +588,12 @@ def test_repost_makes_group_with_topics_and_files_jobs(monkeypatch):
 def test_repost_text_shortens_and_links():
     from core import repost_text
 
-    t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 400, "apply_link": "https://acme.com/a"})
-    assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 1200
+    t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 900, "apply_link": "https://acme.com/a"})
+    assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 4096
+    # a detailed post goes out whole, ending included (the email to send the resume to)
+    long_post = "💼 4) Company - Beroe\nRole - Data Analytics Intern\n" + "- Build dashboards and automation workflows.\n" * 25 + "How to Apply:\nSend your updated resume to careers@beroe.com"
+    t = repost_text({"text": long_post, "apply_link": None})
+    assert t.startswith("💼 Company - Beroe") and t.endswith("careers@beroe.com")
 
 
 def test_repost_text_leaves_out_the_source():
