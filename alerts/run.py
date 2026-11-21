@@ -334,6 +334,34 @@ async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | No
     return new
 
 
+# ---------------------------------------------------------------- LinkedIn (your job-alert emails)
+def check_linkedin(env: dict, state: State, cfg: Config, store: JobStore | None = None, imap_factory=None) -> int:
+    """Jobs from new LinkedIn alert emails in your Gmail. Returns how many were new."""
+    import linkedin
+
+    address, password = env.get("GMAIL_ADDRESS", "").strip(), env.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+    if not (address and password):
+        log.info("linkedin: add the GMAIL_ADDRESS and GMAIL_APP_PASSWORD secrets to read your LinkedIn job alerts")
+        return 0
+    kw = {"imap_factory": imap_factory} if imap_factory else {}
+    mails, last = linkedin.fetch_alerts(address, password, state.linkedin_uid, **kw)
+    new = dup = 0
+    for when, msg in mails:
+        for j in linkedin.parse_alert(msg):
+            text = linkedin.job_text(j)
+            fp = fingerprint(text)
+            if state.was_seen(fp) or (store is not None and fp in store.deleted):
+                dup += 1
+                continue
+            if store is not None:
+                store.add(make_job("LinkedIn", text, j["url"], when, fp=fp))
+            state.mark_seen(fp)
+            new += 1
+    state.linkedin_uid = last
+    log.info("linkedin: %d alert email(s), %d new job(s), %d duplicates", len(mails), new, dup)
+    return new
+
+
 # ---------------------------------------------------------------- your job group (one topic per role type)
 async def create_group(client, title: str, about: str):
     """A private supergroup with Topics, read-only for members; returns (group, invite link)."""
@@ -523,6 +551,12 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             except Exception as e:
                 errors += 1
                 log.error("whatsapp inbox failed: %s", e)
+        if cfg.linkedin_alerts:
+            try:
+                total += check_linkedin(env, state, cfg, store)
+            except Exception as e:
+                errors += 1
+                log.error("linkedin alerts failed: %s", e)
         for ref in cfg.youtube_channels:
             try:
                 n = await check_youtube(ref, state, cfg, outbox.add, env.get("YOUTUBE_API_KEY", ""), store=store)

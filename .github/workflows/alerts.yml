@@ -67,6 +67,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DELETE_IDS: ${{ inputs.delete }}
           RESCAN_CHATS: ${{ inputs.rescan_chats }}
 

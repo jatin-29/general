@@ -632,3 +632,90 @@ def test_repost_sends_todays_site_jobs_once(monkeypatch):
     assert run_async(run.repost(tg, state, cfg, [], store)) == 0  # not again
     cfg.repost_recent_days = 4  # a wider window picks up the 3-day-old one, still not the one already sent
     assert run_async(run.repost(tg, state, cfg, [], store)) == 1 and "Old SDE" in sent[-1]
+
+
+# ---------------------------------------------------------------- LinkedIn job-alert emails
+def _alert(plain=None, html=None):
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    m = MIMEMultipart("alternative")
+    m["From"], m["Subject"], m["Date"] = "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>", "New jobs for Software Engineer", "Sat, 21 Nov 2026 09:00:00 +0530"
+    if plain:
+        m.attach(MIMEText(plain, "plain"))
+    if html:
+        m.attach(MIMEText(html, "html"))
+    return m
+
+
+PLAIN = """Your job alert for software engineer in India
+New jobs match your preferences.
+
+Software Engineer Intern
+Zeta
+Bengaluru, Karnataka, India
+Actively recruiting
+View job: https://www.linkedin.com/comm/jobs/view/4012345678/?trackingId=abc&refId=x
+
+---------------------------------------------------------
+
+Senior Backend Engineer
+Kappa
+Pune, Maharashtra, India
+3 connections
+View job: https://www.linkedin.com/comm/jobs/view/4099999999/?trackingId=def
+
+See all jobs: https://www.linkedin.com/comm/jobs/search
+"""
+
+HTML = """<table><tr><td><a href="https://www.linkedin.com/comm/jobs/view/4055555555/?trk=x"><img alt=""></a></td>
+<td><a href="https://www.linkedin.com/comm/jobs/view/4055555555/?trk=x">Data Analyst Trainee</a>
+<p>BrowseInfo · Noida, Uttar Pradesh, India</p></td></tr></table>"""
+
+
+def test_linkedin_alert_parsing():
+    import linkedin
+
+    jobs = linkedin.parse_alert(_alert(plain=PLAIN))
+    assert [(j["title"], j["company"], j["location"], j["url"]) for j in jobs] == [
+        ("Software Engineer Intern", "Zeta", "Bengaluru, Karnataka, India", "https://www.linkedin.com/jobs/view/4012345678/"),
+        ("Senior Backend Engineer", "Kappa", "Pune, Maharashtra, India", "https://www.linkedin.com/jobs/view/4099999999/"),
+    ]
+    assert "entry level" in linkedin.job_text(jobs[0]) and "entry level" not in linkedin.job_text(jobs[1])  # senior role
+    h = linkedin.parse_alert(_alert(html=HTML))
+    assert [(j["title"], j["company"], j["location"]) for j in h] == [("Data Analyst Trainee", "BrowseInfo", "Noida, Uttar Pradesh, India")]
+
+
+def test_check_linkedin_reads_new_alert_emails_once():
+    class FakeImap:
+        mails = {101: _alert(plain=PLAIN).as_bytes()}
+
+        def __init__(self, host):
+            assert host == "imap.gmail.com"
+
+        def login(self, a, p):
+            assert (a, p) == ("me@gmail.com", "abcdabcdabcdabcd")
+
+        def select(self, box, readonly=False):
+            assert readonly
+
+        def uid(self, cmd, *args):
+            if cmd == "search":
+                crit = args[1]
+                start = int(re.search(r"UID (\d+):", crit).group(1)) if "UID" in crit else 0
+                ids = [str(u) for u in self.mails if u >= start] if "jobalerts" in crit else []
+                return "OK", [" ".join(ids).encode()]
+            return "OK", [(b"1 (BODY[] {1})", self.mails[int(args[0])]), b")"]
+
+        def logout(self):
+            pass
+
+    import re
+
+    store, state = JobStore(password="pw"), State()
+    env = {"GMAIL_ADDRESS": "me@gmail.com", "GMAIL_APP_PASSWORD": "abcd abcd abcd abcd"}
+    assert run.check_linkedin(env, state, Config(linkedin_alerts=True), store, imap_factory=FakeImap) == 2
+    assert state.linkedin_uid == 101 and {j["source"] for j in store.jobs} == {"LinkedIn"}
+    assert store.jobs[-1]["apply_link"] == "https://www.linkedin.com/jobs/view/4012345678/"
+    assert run.check_linkedin(env, state, Config(linkedin_alerts=True), store, imap_factory=FakeImap) == 0  # same email: nothing new
+    assert run.check_linkedin({}, State(), Config(linkedin_alerts=True), store) == 0  # no secrets yet: quiet

@@ -35,6 +35,7 @@ class Config:
     # Role types, one topic each (a job that fits none is not posted), and the batch it must mention ("" = any)
     repost_categories: list[str] = field(default_factory=lambda: ["SDE", "AI/ML", "Data Science", "Analyst", "Product"])
     repost_batch: str = ""
+    linkedin_alerts: bool = False  # read your LinkedIn job-alert emails from Gmail (needs GMAIL_ADDRESS + GMAIL_APP_PASSWORD)
     repost_recent_days: int = 1  # each day, also post the site's jobs from this many days (today = 1)
     repost_per_run: int = 15
 
@@ -133,6 +134,7 @@ class State:
         self.repost_title: str = d.get("repost_title", "")  # the group's name as last set
         self.repost_gid: int = d.get("repost_gid", 0)  # your job group (with topics)
         self.repost_topics: dict[str, int] = d.get("repost_topics", {})  # role type -> topic id
+        self.linkedin_uid: int = d.get("linkedin_uid", 0)  # last LinkedIn alert email read
         self.repost_done: list[str] = d.get("repost_done", [])  # job ids already posted (never twice)
         self.repost_today: str = d.get("repost_today", "")  # the day whose site jobs were sent in one go
 
