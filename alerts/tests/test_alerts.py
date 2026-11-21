@@ -523,9 +523,15 @@ def test_role_types_and_batch():
     for text, want in cases.items():
         assert job_category(text, cats) == want, text
     assert job_category("Data Analyst trainee", ["SDE"]) is None
-    for t in ["2027 batch", "Batch: 2025/2026/2027", "2k27 grads", "for '27 passouts", "27 batch only"]:
+    yes = ["2027 batch", "Batch: 2025/2026/2027", "2k27 grads", "for '27 passouts", "27 batch only",
+           "Eligible batches: 2025-2027", "2026/27 passouts", "2026 & 2027 batch", "Graduating in 2027",
+           "Open to final year students", "Hiring freshers", "SDE Intern, stipend 40k", "0-1 years experience",
+           "Freshers. Last date: 30 Nov 2026"]
+    no = ["2026 batch", "2025 passouts only", "5 years experience", "Backend Engineer, 2+ years of experience",
+          "Pre-final year students (internship)", "Senior engineer", "2023-2025 batch"]
+    for t in yes:
         assert batch_match(t, "2027"), t
-    for t in ["2026 batch", "5 years experience", "Hiring freshers"]:
+    for t in no:
         assert not batch_match(t, "2027"), t
     assert batch_match("anything", "")
 
@@ -560,11 +566,12 @@ def test_repost_makes_group_with_topics_and_files_jobs(monkeypatch):
     monkeypatch.setattr(run, "existing_topics", no_topics)
     monkeypatch.setattr(run.asyncio, "sleep", no_wait)
     store, state = JobStore(password="pw"), State()
-    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_batch="2027")
+    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_batch="2027", repost_skip=["ep"])
     jobs = [
         make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern, 2027 batch https://zeta.io/1", None),
         make_job("Premium Membership", "Data Scientist Intern | 2027 grads https://k.io/2", None),
         make_job("Premium Membership", "Backend Developer, 2026 batch https://k.io/3", None),  # wrong batch
+        make_job("WhatsApp · EP1 Placements", "SDE intern, 2027 batch https://e.io/9", None),  # skipped group
         make_job("Saved Messages", "SDE intern 2027 batch https://b.io/4", None),  # not a chosen source
         make_job("WhatsApp · X", "HR Recruiter, 2027 batch https://h.io/5", None),  # not a tech role
     ]
@@ -623,3 +630,5 @@ def test_repost_sends_todays_site_jobs_once(monkeypatch):
     cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_batch="2027")
     assert run_async(run.repost(tg, state, cfg, [], store)) == 1 and "Zeta" in sent[0]  # today's site job, not the old one
     assert run_async(run.repost(tg, state, cfg, [], store)) == 0  # not again
+    cfg.repost_recent_days = 4  # a wider window picks up the 3-day-old one, still not the one already sent
+    assert run_async(run.repost(tg, state, cfg, [], store)) == 1 and "Old SDE" in sent[-1]

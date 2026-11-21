@@ -18,11 +18,14 @@ repost_channel = "auto"
 repost_title = "Job Posts"
 # Only these sources (job "source" names as shown on the website; "WhatsApp" covers every WhatsApp group)
 repost_sources = ["WhatsApp", "Premium Membership"]
-repost_skip = []
+# Groups never posted (a source name, or how a WhatsApp group's name starts)
+repost_skip = ["ep"]
 # Role types, one topic each; a job that fits none of them is not posted
 repost_categories = ["SDE", "AI/ML", "Data Science", "Analyst", "Product"]
 # Only posts that mention this batch (2027, 2k27, '27 batch…); "" = any batch
 repost_batch = "2027"
+# Each day, also post matching site jobs from the last N days (posted once only)
+repost_recent_days = 3
 
 # YouTube channels: channel URL, @handle, or channel id (UC...).
 youtube_channels = [

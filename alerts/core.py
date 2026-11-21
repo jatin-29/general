@@ -35,6 +35,7 @@ class Config:
     # Role types, one topic each (a job that fits none is not posted), and the batch it must mention ("" = any)
     repost_categories: list[str] = field(default_factory=lambda: ["SDE", "AI/ML", "Data Science", "Analyst", "Product"])
     repost_batch: str = ""
+    repost_recent_days: int = 1  # each day, also post the site's jobs from this many days (today = 1)
     repost_per_run: int = 15
 
 
@@ -267,12 +268,52 @@ def job_category(text: str, wanted: list[str]) -> str | None:
     return None
 
 
+_BATCH_WORD = r"(?:batch(?:es)?|pass(?:ing)?[ -]?outs?|graduat\w*|grads?|class of|year of passing|yop|eligib\w*|students?|freshers?)"
+_YEAR = r"(?:20)?2\d|2k2\d|['’]2\d"
+_YEAR_RUN = re.compile(rf"(?<![\d/.-])({_YEAR})(?:\s*(?:-|–|to|/|&|,|and|or)\s*({_YEAR}))*(?![\d/.])", re.I)
+_FINAL_YEAR = re.compile(r"(?<!pre[- ])(?<!pre)\bfinal[- ]year\b", re.I)
+_PRE_FINAL = re.compile(r"\bpre[- ]?final[- ]year\b", re.I)
+_FOR_FRESHERS = re.compile(r"\b(freshers?|entry[- ]level|interns?|internships?|trainees?|new grads?|students?|0\s*(?:-|–|to)\s*1\s*(?:yrs?|years?)|no experience)\b", re.I)
+_NEEDS_EXPERIENCE = re.compile(r"\b([1-9])\s*\+?\s*(?:-|–|to)?\s*\d*\s*\+?\s*(?:yrs?|years?)\s*(?:of\s*)?(?:relevant\s+|work\s+)?(?:exp|experience)", re.I)
+
+
+def _year(tok: str) -> int:
+    d = re.sub(r"\D", "", tok)[-2:]
+    return 2000 + int(d)
+
+
+def batch_years(text: str) -> set[int]:
+    """Batch years a post names: "2027 batch", "2025-2027 passouts", "2026/27", "graduating in 2k27" (not "Last date: 30 Nov 2026")."""
+    years: set[int] = set()
+    for m in _YEAR_RUN.finditer(text):
+        before = text[max(0, m.start() - 16): m.start()]
+        if re.search(r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s*$|\d\s*[/.-]\s*$|\b(date|deadline|by|till|until|before|on)\b[:\s\d]*$", before, re.I):
+            continue  # part of a date ("30 Nov 2026", "Last date: 2026")
+        around = text[max(0, m.start() - 40): m.end() + 40]
+        if not re.search(_BATCH_WORD, around, re.I):
+            continue  # a number, not a batch
+        found = [_year(t) for t in re.findall(_YEAR, m.group(0), re.I)]
+        found = [y for y in found if 2018 <= y <= 2032]
+        if len(found) >= 2 and re.search(r"\d\s*(?:-|–|to)\s*", m.group(0)):  # a range: 2025-2027 -> 2025, 2026, 2027
+            years.update(range(min(found), max(found) + 1))
+        else:
+            years.update(found)
+    return years
+
+
 def batch_match(text: str, batch: str) -> bool:
-    """Does the post name this batch ("2027", "2k27", "'27 batch", "27 batch")?"""
+    """Is this post open to `batch` (e.g. "2027")? Named batches decide; with none named, a post for freshers,
+    interns or final-year students counts, unless it asks for experience or pre-final-year students."""
     if not batch:
         return True
-    yy = batch[-2:]
-    return re.search(rf"\b{batch}\b|\b2k{yy}\b|['’]{yy}\b|\b{yy}\s*(?:batch|pass ?out|grads?)\b", text, re.I) is not None
+    want = int(batch)
+    named = batch_years(text)
+    if named:
+        return want in named
+    no_zero_ranges = re.sub(r"\b0\s*(?:-|–|to)\s*\d+", " ", text)  # "0-1 years" welcomes freshers
+    if _PRE_FINAL.search(text) or _NEEDS_EXPERIENCE.search(no_zero_ranges):
+        return False
+    return bool(_FINAL_YEAR.search(text) or _FOR_FRESHERS.search(text))
 
 
 # Lines that only point back to where the post came from ("Join our WhatsApp group", "Follow @xyz", invite links…)

@@ -413,11 +413,13 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
     from datetime import datetime, timedelta, timezone
 
     ist = timezone(timedelta(hours=5, minutes=30))
-    today = datetime.now(ist).date().isoformat()
-    if store is not None and state.repost_today != today:
-        state.repost_today = today
-        on_site = [j for j in reversed(store.jobs) if (j.get("posted_at") or j.get("added_at") or "") and
-                   datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date().isoformat() == today]
+    today = datetime.now(ist).date()
+    mark = f"{today.isoformat()}/{cfg.repost_recent_days}"
+    if store is not None and state.repost_today != mark:
+        state.repost_today = mark
+        since = today - timedelta(days=max(1, cfg.repost_recent_days) - 1)
+        on_site = [j for j in reversed(store.jobs) if (j.get("posted_at") or j.get("added_at")) and
+                   datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date() >= since]
         new_jobs = on_site + [j for j in new_jobs if j not in on_site]
     queued = {q["id"] for q in state.repost_queue} | set(state.repost_done)
     for j in new_jobs:
@@ -425,7 +427,8 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
             continue
         queued.add(j["id"])
         src = j["source"].strip().lower()
-        if src in skip or (only and not any(src.startswith(o) for o in only)) or not batch_match(j["text"], cfg.repost_batch):
+        group = src.split("·", 1)[-1].strip()
+        if src in skip or any(group.startswith(k) for k in skip) or (only and not any(src.startswith(o) for o in only)) or not batch_match(j["text"], cfg.repost_batch):
             continue
         category = job_category(j["text"], cfg.repost_categories)
         if category:
