@@ -409,7 +409,21 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
     """Post new jobs (oldest first) into their topic in your job group, a few per run. Returns how many were posted."""
     skip = {s.strip().lower() for s in cfg.repost_skip}
     only = [s.strip().lower() for s in cfg.repost_sources if s.strip()]
+    # once a day (from the first run of the day): today's jobs already on the site, not only brand-new ones
+    from datetime import datetime, timedelta, timezone
+
+    ist = timezone(timedelta(hours=5, minutes=30))
+    today = datetime.now(ist).date().isoformat()
+    if store is not None and state.repost_today != today:
+        state.repost_today = today
+        on_site = [j for j in reversed(store.jobs) if (j.get("posted_at") or j.get("added_at") or "") and
+                   datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date().isoformat() == today]
+        new_jobs = on_site + [j for j in new_jobs if j not in on_site]
+    queued = {q["id"] for q in state.repost_queue} | set(state.repost_done)
     for j in new_jobs:
+        if j["id"] in queued:
+            continue
+        queued.add(j["id"])
         src = j["source"].strip().lower()
         if src in skip or (only and not any(src.startswith(o) for o in only)) or not batch_match(j["text"], cfg.repost_batch):
             continue
@@ -435,6 +449,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
                     break
                 raise
             sent += 1
+            state.repost_done.append(job["id"])
             await asyncio.sleep(3 if sent < cfg.repost_per_run else 0)
         state.repost_queue.pop(0)
     log.info("repost: posted %d job(s) to your group, %d waiting", sent, len(state.repost_queue))

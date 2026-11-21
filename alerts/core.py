@@ -132,6 +132,8 @@ class State:
         self.repost_title: str = d.get("repost_title", "")  # the group's name as last set
         self.repost_gid: int = d.get("repost_gid", 0)  # your job group (with topics)
         self.repost_topics: dict[str, int] = d.get("repost_topics", {})  # role type -> topic id
+        self.repost_done: list[str] = d.get("repost_done", [])  # job ids already posted (never twice)
+        self.repost_today: str = d.get("repost_today", "")  # the day whose site jobs were sent in one go
 
     def repost_title_pending(self, wanted: str) -> bool:
         return bool(wanted) and self.repost_title != wanted
@@ -146,6 +148,7 @@ class State:
     def save(self, path: str | Path) -> None:
         self.seen = self.seen[-MAX_SEEN:]
         self.repost_queue = self.repost_queue[-200:]
+        self.repost_done = self.repost_done[-3000:]
         self.youtube = {k: v[-MAX_YT_IDS:] for k, v in self.youtube.items()}
         Path(path).write_text(json.dumps(self.__dict__, indent=1), encoding="utf-8")
 
@@ -272,9 +275,32 @@ def batch_match(text: str, batch: str) -> bool:
     return re.search(rf"\b{batch}\b|\b2k{yy}\b|['’]{yy}\b|\b{yy}\s*(?:batch|pass ?out|grads?)\b", text, re.I) is not None
 
 
+# Lines that only point back to where the post came from ("Join our WhatsApp group", "Follow @xyz", invite links…)
+_SOURCE_LINE = re.compile(
+    r"\b(join|follow|subscribe|share (?:this|with)|forward(?:ed)? (?:from|to)|credits?|via|our (?:channel|group|community|page))\b"
+    r"|chat\.whatsapp\.com|whatsapp\.com/channel|wa\.me/|t\.me/|telegram\.(?:me|dog)/|instagram\.com|linktr\.ee|youtube\.com|youtu\.be"
+    r"|^\s*@\w{4,}\s*$",
+    re.I,
+)
+
+
+def clean_post(text: str) -> str:
+    """The post without its source: the sender's name in front and lines about the group/channel it came from."""
+    text = text.strip()
+    sender = WA_SENDER.match(text)
+    if sender and len(sender[2].split()) <= 4 and not WA_NOT_SENDER.search(sender[2]):
+        text = text[sender.end():]
+    kept = []
+    for line in text.splitlines():
+        if _SOURCE_LINE.search(line) and not job_links(line):  # keep a line that also carries the apply link
+            continue
+        kept.append(re.sub(r"(?<!\w)@[A-Za-z]\w{3,}", "", line).rstrip())
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
+
+
 def repost_text(job: dict) -> str:
-    """A job as posted in your channel: title line, tags, the post (shortened), apply link."""
-    text = job["text"].strip()
+    """A job as posted in your group: title line, tags, the post (shortened, without its source), apply link."""
+    text = clean_post(job["text"]) or job["text"].strip()
     first = next((l.strip() for l in text.splitlines() if l.strip()), "Job opening")
     title = re.sub(r"https?://\S+", "", first).strip()[:120] or "Job opening"
     tags = []

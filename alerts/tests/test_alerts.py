@@ -583,3 +583,43 @@ def test_repost_text_shortens_and_links():
 
     t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 400, "apply_link": "https://acme.com/a"})
     assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 1200
+
+
+def test_repost_text_leaves_out_the_source():
+    from core import repost_text
+
+    post = repost_text({"text": "Akshat Jain: Zeta hiring SDE Intern, 2027 batch\nStipend 50k\nApply: https://zeta.io/jobs/1\n"
+                                "Join our WhatsApp group: https://chat.whatsapp.com/AbC\nFollow @offcampusjobs4u for more\nForwarded from Premium Membership",
+                        "apply_link": "https://zeta.io/jobs/1"})
+    assert post.startswith("💼 Zeta hiring SDE Intern") and "Akshat" not in post
+    for gone in ("chat.whatsapp", "offcampusjobs4u", "Join", "Forwarded", "Premium"):
+        assert gone not in post, gone
+    assert "Stipend 50k" in post and "https://zeta.io/jobs/1" in post
+
+
+def test_repost_sends_todays_site_jobs_once(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from core import make_job
+
+    sent = []
+
+    class Client(FakeTelegram):
+        async def send_message(self, to, text, link_preview=True, reply_to=None):
+            sent.append(text)
+
+    async def no_wait(_s):
+        return None
+
+    monkeypatch.setattr(run.asyncio, "sleep", no_wait)
+    g = SimpleNamespace(id=777, title="Job Posts", megagroup=True, forum=True, creator=True)
+    tg = Client({"@g": (g, [])})
+    state = State()
+    state.repost_gid, state.repost_title, state.repost_topics = 777, "Job Posts", {c: i for i, c in enumerate(["SDE", "AI/ML", "Data Science", "Analyst", "Product"], 101)}
+    now = datetime.now(timezone.utc)
+    store = JobStore(password="pw")
+    store.add(make_job("WhatsApp · X", "Old SDE role, 2027 batch https://o.io/1", None, posted_at=now - timedelta(days=3)))
+    store.add(make_job("Premium Membership", "SDE Intern at Zeta, 2027 batch https://z.io/2", None, posted_at=now))
+    cfg = Config(repost_channel="auto", repost_title="Job Posts", repost_sources=["WhatsApp", "Premium Membership"], repost_batch="2027")
+    assert run_async(run.repost(tg, state, cfg, [], store)) == 1 and "Zeta" in sent[0]  # today's site job, not the old one
+    assert run_async(run.repost(tg, state, cfg, [], store)) == 0  # not again
