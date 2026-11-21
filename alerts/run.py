@@ -369,9 +369,9 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
         {"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"]}
         for j in new_jobs if j["source"].strip().lower() not in skip
     ]
-    if not state.repost_queue:
+    if not state.repost_queue and state.repost_id:
         return 0
-    channel = await find_repost_channel(client, state, cfg)
+    channel = await find_repost_channel(client, state, cfg)  # the first run makes the channel right away
     sent = 0
     while state.repost_queue and sent < cfg.repost_per_run:
         job = state.repost_queue[0]
