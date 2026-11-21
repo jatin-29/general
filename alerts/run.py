@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
     Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
-    parse_wa, wa_signals,
+    parse_wa, repost_text, wa_signals,
 )
 
 log = logging.getLogger("alerts")
@@ -29,7 +29,7 @@ FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
 UC = re.compile(r"UC[\w-]{22}")
 
 
-OWN_ALERT_PREFIXES = ("📌", "✅ Job alerts")
+OWN_ALERT_PREFIXES = ("📌", "✅ Job alerts", "📢")
 
 
 class AuthError(Exception):
@@ -334,6 +334,62 @@ async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | No
     return new
 
 
+# ---------------------------------------------------------------- your job channel
+async def create_channel(client, title: str):
+    """Make a private broadcast channel on your account; returns (channel, invite link)."""
+    from telethon.tl.functions.channels import CreateChannelRequest
+    from telethon.tl.functions.messages import ExportChatInviteRequest
+
+    res = await client(CreateChannelRequest(title=title, about="Job and internship openings, collected automatically.", broadcast=True))
+    channel = res.chats[0]
+    link = (await client(ExportChatInviteRequest(peer=channel))).link
+    return channel, link
+
+
+async def find_repost_channel(client, state: State, cfg: Config):
+    ref = (cfg.repost_channel or "").strip()
+    if ref.lower() != "auto":
+        return await client.get_entity(clean_ref(ref))
+    async for d in client.iter_dialogs(limit=300):
+        e = d.entity
+        if getattr(e, "broadcast", False) and (e.id == state.repost_id or (getattr(e, "creator", False) and getattr(e, "title", "") == cfg.repost_title)):
+            state.repost_id = e.id
+            return e
+    channel, link = await create_channel(client, cfg.repost_title)
+    state.repost_id = channel.id
+    await client.send_message("me", f"📢 Your job channel \"{cfg.repost_title}\" is ready. New jobs will be posted there.\nInvite link: {link}", link_preview=False)
+    log.info("repost: created the channel %r", cfg.repost_title)
+    return channel
+
+
+async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store: JobStore | None = None) -> int:
+    """Post new jobs (oldest first) to your channel, a few per run, spaced out. Returns how many were posted."""
+    skip = {s.strip().lower() for s in cfg.repost_skip}
+    state.repost_queue += [
+        {"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"]}
+        for j in new_jobs if j["source"].strip().lower() not in skip
+    ]
+    if not state.repost_queue:
+        return 0
+    channel = await find_repost_channel(client, state, cfg)
+    sent = 0
+    while state.repost_queue and sent < cfg.repost_per_run:
+        job = state.repost_queue[0]
+        if store is None or job["fingerprint"] not in store.deleted:  # deleted on the website: don't post
+            try:
+                await client.send_message(channel, repost_text(job), link_preview=False)
+            except Exception as e:
+                if type(e).__name__ == "FloodWaitError":
+                    log.warning("repost: Telegram asked to slow down; %d job(s) wait for the next run", len(state.repost_queue))
+                    break
+                raise
+            sent += 1
+            await asyncio.sleep(3 if sent < cfg.repost_per_run else 0)
+        state.repost_queue.pop(0)
+    log.info("repost: posted %d job(s) to your channel, %d waiting", sent, len(state.repost_queue))
+    return sent
+
+
 # ---------------------------------------------------------------- main
 async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, test: bool = False, store: JobStore | None = None, rescan: int = 0) -> int:
     client = None
@@ -381,6 +437,7 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             log.warning("Nothing to watch yet: add chats/channels to alerts/config.toml")
         outbox = Outbox(notify, pause=0 if dry_run else 2.0)
         total = 0
+        before = {j["id"] for j in store.jobs} if store is not None else set()
         for ref in cfg.telegram_chats:
             try:
                 scope = {c.strip() for c in env.get("RESCAN_CHATS", "").split(",") if c.strip()}
@@ -405,6 +462,13 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             except Exception as e:
                 errors += 1
                 log.error("youtube %s failed: %s", ref, e)
+        if client and cfg.repost_channel and store is not None and not dry_run:
+            new_jobs = [j for j in reversed(store.jobs) if j["id"] not in before]
+            try:
+                await repost(client, state, cfg, new_jobs, store)
+            except Exception as e:
+                errors += 1
+                log.error("repost to your channel failed: %s", e)
         messages = await outbox.flush()
         log.info("done: %d new job(s), sent as %d Telegram message(s); %d source(s) failed", total, messages, errors)
         return errors

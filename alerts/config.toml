@@ -12,6 +12,13 @@ telegram_chats = [
 # "auto" finds that bot chat by itself; "" turns it off.
 whatsapp_inbox = "auto"
 
+# Your own job channel. "auto": the collector creates a private channel on your account (named below) and
+# sends the invite link to your Saved Messages; new jobs are posted there. "" turns it off.
+repost_channel = "auto"
+repost_title = "OpeningsHub Jobs"
+# Sources never reposted (job "source" names as shown on the website). A paid group's posts stay private.
+repost_skip = ["Premium Membership"]
+
 # YouTube channels: channel URL, @handle, or channel id (UC...).
 youtube_channels = [
   # "@SomeJobsChannel",

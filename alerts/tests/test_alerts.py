@@ -500,3 +500,47 @@ def test_whatsapp_rescan_brings_back_skipped_posts():
     assert run_async(run.check_whatsapp(tg, state, Config(), store)) == 0
     assert run_async(run.check_whatsapp(tg, state, Config(), store, rescan=10)) == 1
     assert store.jobs[0]["source"] == "WhatsApp · Jobs" and state.wa_groups == ["Jobs"]
+
+
+# ---------------------------------------------------------------- your job channel
+def test_repost_creates_channel_once_and_skips_paid_group(monkeypatch):
+    from core import make_job
+
+    sent = []
+
+    class Client(FakeTelegram):
+        async def send_message(self, to, text, link_preview=True):
+            sent.append((to, text))
+
+    made = []
+
+    async def fake_create(client, title):
+        ch = SimpleNamespace(id=555, title=title, broadcast=True, creator=True)
+        made.append(ch)
+        client.chats["@ch"] = (ch, [])
+        return ch, "https://t.me/+abc"
+
+    monkeypatch.setattr(run, "create_channel", fake_create)
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(run.asyncio, "sleep", no_wait)
+    store, state, cfg = JobStore(password="pw"), State(), Config(repost_channel="auto", repost_skip=["Premium Membership"])
+    jobs = [make_job("WhatsApp · Off Campus", "Zeta hiring SDE Intern, 2026 batch https://zeta.io/jobs/1", None),
+            make_job("Premium Membership", "Paid group job https://x.io/1", None)]
+    tg = Client({})
+    assert run_async(run.repost(tg, state, cfg, jobs, store)) == 1
+    assert len(made) == 1 and state.repost_id == 555
+    assert sent[0][0] == "me" and "t.me/+abc" in sent[0][1]  # invite link to Saved Messages
+    post = sent[1][1]
+    assert sent[1][0] is made[0] and post.startswith("💼 Zeta hiring SDE Intern") and "#internship" in post and "#fresher" in post
+    # next run finds the same channel instead of making another
+    assert run_async(run.repost(tg, state, cfg, [make_job("WhatsApp · X", "Kappa hiring analyst, freshers https://k.io/2", None)], store)) == 1
+    assert len(made) == 1
+
+
+def test_repost_text_shortens_and_links():
+    from core import repost_text
+
+    t = repost_text({"text": "Senior Engineer at Acme\n" + "word " * 400, "apply_link": "https://acme.com/a"})
+    assert t.startswith("💼 Senior Engineer at Acme") and "#fresher" not in t and t.endswith("🔗 Apply: https://acme.com/a") and len(t) < 1200

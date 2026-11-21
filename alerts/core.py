@@ -26,6 +26,12 @@ class Config:
     # Telegram bot chat that MacroDroid fills with WhatsApp notifications ("WA: <title> || <text>").
     # "auto" finds it by itself; "" turns it off; or name it, e.g. "@my_jobs_bot".
     whatsapp_inbox: str = "auto"
+    # Your own job channel: new jobs are posted there. "auto" creates a private channel called repost_title
+    # (and sends you its invite link); "" turns it off; or name an existing channel, e.g. "@my_jobs".
+    repost_channel: str = ""
+    repost_title: str = "OpeningsHub Jobs"
+    repost_skip: list[str] = field(default_factory=list)  # job sources never reposted (e.g. a paid group)
+    repost_per_run: int = 15
 
 
 def load_config(path: str | Path) -> Config:
@@ -117,6 +123,8 @@ class State:
         self.channels: dict[str, str] = d.get("channels", {})  # youtube handle -> channel id
         self.whatsapp: int = d.get("whatsapp", 0)  # last message id read from the WhatsApp inbox chat
         self.wa_groups: list[str] = d.get("wa_groups", [])  # WhatsApp chats that have posted jobs
+        self.repost_id: int = d.get("repost_id", 0)  # your job channel
+        self.repost_queue: list[dict] = d.get("repost_queue", [])  # jobs waiting to be posted there
 
     @classmethod
     def load(cls, path: str | Path) -> "State":
@@ -127,6 +135,7 @@ class State:
 
     def save(self, path: str | Path) -> None:
         self.seen = self.seen[-MAX_SEEN:]
+        self.repost_queue = self.repost_queue[-200:]
         self.youtube = {k: v[-MAX_YT_IDS:] for k, v in self.youtube.items()}
         Path(path).write_text(json.dumps(self.__dict__, indent=1), encoding="utf-8")
 
@@ -200,6 +209,36 @@ def is_wa_job(text: str, cfg: "Config", job_group: bool = False) -> bool:
     if contact and words >= 1 and len(text) >= 30:
         return True
     return words >= 4 or (words >= 3 and (job_group or len(text) >= 120))
+
+
+# ---------------------------------------------------------------- your job channel
+_FRESHER = re.compile(r"\b(freshers?|entry[- ]level|no (?:prior )?experience|new grads?|0\s*(?:-|–|to)\s*\d{1,2}\s*(?:yrs?|years?))\b", re.I)
+_HINT = re.compile(r"\b(trainees?|off[- ]?campus|batch(?:es)?|pass ?outs?|graduat\w*)\b", re.I)
+_INTERN = re.compile(r"\b(internships?|interns?)\b", re.I)
+_SENIOR = re.compile(r"\b(senior|sr\.|lead|principal|manager|director|architect|[2-9]\s*\+?\s*(?:-\s*\d+\s*)?(?:yrs?|years?))\b", re.I)
+
+
+def repost_text(job: dict) -> str:
+    """A job as posted in your channel: title line, tags, the post (shortened), apply link."""
+    text = job["text"].strip()
+    first = next((l.strip() for l in text.splitlines() if l.strip()), "Job opening")
+    title = re.sub(r"https?://\S+", "", first).strip()[:120] or "Job opening"
+    tags = []
+    if _INTERN.search(text):
+        tags.append("#internship")
+    if _FRESHER.search(text) or (_HINT.search(text) and not _SENIOR.search(text)):
+        tags.append("#fresher")
+    rest = text[len(first):].strip()
+    if len(rest) > 900:
+        rest = rest[:900].rsplit(" ", 1)[0] + "…"
+    parts = [f"💼 {title}"]
+    if tags:
+        parts.append(" ".join(tags))
+    if rest:
+        parts.append(rest)
+    if job.get("apply_link") and job["apply_link"] not in rest:
+        parts.append(f"🔗 Apply: {job['apply_link']}")
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------- YouTube feed
