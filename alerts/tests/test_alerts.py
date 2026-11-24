@@ -774,3 +774,15 @@ def test_remove_latest_member():
     b.username = "chiragjain99"
     assert run_async(run.remove_member(tg, state, cfg, "chirag jain")) == 1 and kicked[-1] == "Chirag"
     assert run_async(run.remove_member(tg, state, cfg, "chirag khanna")) == 0 and "Members now" in notes[-1][1]
+
+
+def test_more_role_topics():
+    from core import job_category
+
+    w = ["SDE", "AI/ML", "Data Science", "Analyst", "Product", "QA/Testing", "DevOps/Cloud", "Cybersecurity", "UI/UX Design", "Consulting", "Core/Hardware"]
+    assert job_category("AI/ML & Data Science Intern", w) == "Data Science"
+    assert job_category("QA Engineer (Freshers)", w) == "QA/Testing"
+    assert job_category("DevOps Engineer Trainee", w) == "DevOps/Cloud"
+    assert job_category("UI/UX Designer Intern", w) == "UI/UX Design"
+    assert job_category("Software Engineer at an AI startup", w) == "SDE"
+    assert job_category("QA Engineer (Freshers)", ["SDE", "AI/ML"]) is None  # no topic chosen: not posted

@@ -508,7 +508,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
 
     ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(ist).date()
-    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/4"  # bump the last part to sweep again today
+    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/5"  # bump the last part to sweep again today
     if store is not None and state.repost_today != mark:
         state.repost_today = mark
         since = today - timedelta(days=max(1, cfg.repost_recent_days) - 1)
@@ -541,12 +541,12 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
         log.info("repost: looked at %d job(s): %s", sum(why.values()), ", ".join(f"{n} {k}" for k, n in why.items() if n))
         if why_batch:
             log.info("repost: not the batch because: %s", ", ".join(f"{n} {k}" for k, n in sorted(why_batch.items(), key=lambda x: -x[1])))
-    if not state.repost_queue and state.repost_gid and not state.repost_title_pending(cfg.repost_title):
+    missing = [c for c in cfg.repost_categories if c not in state.repost_topics]
+    if not state.repost_queue and state.repost_gid and not missing and not state.repost_title_pending(cfg.repost_title):
         return 0
     group = await find_repost_group(client, state, cfg)  # the first run makes the group right away
-    if not state.repost_topics:
-        for c in cfg.repost_categories:  # all topics up front, in your order
-            await topic_for(client, group, state, c)
+    for c in missing:  # every topic up front, in your order (new ones from config.toml too)
+        await topic_for(client, group, state, c)
     sent = 0
     while state.repost_queue and sent < cfg.repost_per_run:
         job = state.repost_queue[0]

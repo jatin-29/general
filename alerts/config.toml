@@ -23,7 +23,7 @@ repost_sources = ["WhatsApp", "Premium Membership", "LinkedIn"]
 # Groups never posted (a source name, or how a WhatsApp group's name starts)
 repost_skip = ["ep"]
 # Role types, one topic each; a job that fits none of them is not posted
-repost_categories = ["SDE", "AI/ML", "Data Science", "Analyst", "Product"]
+repost_categories = ["SDE", "AI/ML", "Data Science", "Analyst", "Product", "QA/Testing", "DevOps/Cloud", "Cybersecurity", "UI/UX Design", "Consulting", "Core/Hardware"]
 # Only posts that mention this batch (2027, 2k27, '27 batch…); "" = any batch
 repost_batch = "2027"
 # Each day, also post matching site jobs from the last N days (posted once only)

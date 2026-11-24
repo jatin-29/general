@@ -287,6 +287,9 @@ def job_category(text: str, wanted: list[str]) -> str | None:
         return None
     first = next((l for l in text.splitlines() if l.strip()), "")
     rules = [(n, rx) for n, rx in ROLE_TYPES.items() if n in wanted] + ([("SDE", SDE_ROLE)] if "SDE" in wanted else [])
+    ds = "Data Science" in wanted and re.search(r"\bdata scien\w*", first, re.I)
+    if ds:
+        return "Data Science"  # "AI/ML & Data Science Intern": the more specific topic
     for part in (first, text[:600]):
         hits = [(m.start(), i, name) for i, (name, rx) in enumerate(rules) if (m := rx.search(part))]
         if hits:
