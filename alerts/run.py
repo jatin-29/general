@@ -467,6 +467,20 @@ async def remove_member(client, state: State, cfg: Config, who: str) -> int:
     return len(people)
 
 
+def _batch_reason(text: str) -> str:
+    """Why a post is not for your batch, in a few words (for the counts in the run log)."""
+    from core import _FINAL_YEAR, _FOR_FRESHERS, _NEEDS_EXPERIENCE, _PRE_FINAL, batch_years
+
+    named = batch_years(text)
+    if named:
+        return "names batch " + "/".join(str(y) for y in sorted(named))
+    if _PRE_FINAL.search(text):
+        return "pre-final year"
+    if _NEEDS_EXPERIENCE.search(re.sub(r"\b0\s*(?:-|–|to)\s*\d+", " ", text)):
+        return "asks for experience"
+    return "no batch or fresher word"
+
+
 async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store: JobStore | None = None) -> int:
     """Post new jobs (oldest first) into their topic in your job group, a few per run. Returns how many were posted."""
     skip = {s.strip().lower() for s in cfg.repost_skip}
@@ -476,7 +490,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
 
     ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(ist).date()
-    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/2"  # bump the last part to sweep again today
+    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/3"  # bump the last part to sweep again today
     if store is not None and state.repost_today != mark:
         state.repost_today = mark
         since = today - timedelta(days=max(1, cfg.repost_recent_days) - 1)
@@ -484,6 +498,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
                    datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date() >= since]
         new_jobs = on_site + [j for j in new_jobs if j not in on_site]
     queued = {q["id"] for q in state.repost_queue} | set(state.repost_done)
+    why_batch: dict[str, int] = {}
     why = {"other source": 0, "skipped group": 0, f"not {cfg.repost_batch or 'any'} batch": 0, "other role": 0, "queued": 0}
     for j in new_jobs:
         if j["id"] in queued:
@@ -497,6 +512,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
             why["skipped group"] += 1
         elif not batch_match(j["text"], cfg.repost_batch):
             why[f"not {cfg.repost_batch or 'any'} batch"] += 1
+            why_batch[_batch_reason(j["text"])] = why_batch.get(_batch_reason(j["text"]), 0) + 1
         elif not (category := job_category(j["text"], cfg.repost_categories)):
             why["other role"] += 1
         else:
@@ -504,6 +520,8 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
             state.repost_queue.append({"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"], "category": category})
     if sum(why.values()):  # counts only: never the job text in the public log
         log.info("repost: looked at %d job(s): %s", sum(why.values()), ", ".join(f"{n} {k}" for k, n in why.items() if n))
+        if why_batch:
+            log.info("repost: not the batch because: %s", ", ".join(f"{n} {k}" for k, n in sorted(why_batch.items(), key=lambda x: -x[1])))
     if not state.repost_queue and state.repost_gid and not state.repost_title_pending(cfg.repost_title):
         return 0
     group = await find_repost_group(client, state, cfg)  # the first run makes the group right away
