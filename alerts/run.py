@@ -434,6 +434,29 @@ async def topic_for(client, group, state: State, category: str) -> int:
     return state.repost_topics[category]
 
 
+async def remove_member(client, state: State, cfg: Config, who: str) -> int:
+    """Remove someone from your job group: "latest" (who joined last) or part of their name. You get a note in
+    Saved Messages with the name (the public run log only says how many). Returns how many were removed."""
+    group = await find_repost_group(client, state, cfg)
+    people = []
+    async for u in client.iter_participants(group):
+        p = getattr(u, "participant", None)
+        if getattr(u, "is_self", False) or getattr(u, "bot", False) or type(p).__name__ in ("ChannelParticipantCreator", "ChannelParticipantAdmin"):
+            continue
+        name = " ".join(x for x in (getattr(u, "first_name", None), getattr(u, "last_name", None)) if x) or getattr(u, "username", None) or str(u.id)
+        people.append((getattr(p, "date", None), name, u))
+    if who.strip().lower() == "latest":
+        people = [max(people, key=lambda x: x[0].timestamp() if x[0] else 0)] if people else []
+    else:
+        people = [x for x in people if who.strip().lower() in x[1].lower()]
+    for joined, name, u in people:
+        await client.kick_participant(group, u)
+        when = f" (joined {joined.strftime('%d %b %Y, %H:%M UTC')})" if joined else ""
+        await client.send_message("me", f"📢 Removed {name}{when} from your group \"{cfg.repost_title}\".", link_preview=False)
+    log.info("group: removed %d member(s)", len(people))
+    return len(people)
+
+
 async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store: JobStore | None = None) -> int:
     """Post new jobs (oldest first) into their topic in your job group, a few per run. Returns how many were posted."""
     skip = {s.strip().lower() for s in cfg.repost_skip}
@@ -570,6 +593,12 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             except Exception as e:
                 errors += 1
                 log.error("youtube %s failed: %s", ref, e)
+        if client and cfg.repost_channel and env.get("REMOVE_MEMBER", "").strip() and not dry_run:
+            try:
+                await remove_member(client, state, cfg, env["REMOVE_MEMBER"])
+            except Exception as e:
+                errors += 1
+                log.error("removing a group member failed: %s", e)
         if client and cfg.repost_channel and store is not None and not dry_run:
             new_jobs = [j for j in reversed(store.jobs) if j["id"] not in before]
             try:

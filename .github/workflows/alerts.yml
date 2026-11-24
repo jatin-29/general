@@ -21,6 +21,10 @@ on:
         description: "Only re-check these chats (comma separated, e.g. me), empty = all"
         type: string
         default: ""
+      remove_member:
+        description: "Remove someone from your Job Posts group: 'latest' (who joined last) or part of their name"
+        type: string
+        default: ""
       delete:
         description: "Job ids to delete from the website, comma separated (used by the site's delete button)"
         type: string
@@ -69,6 +73,7 @@ jobs:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REMOVE_MEMBER: ${{ inputs.remove_member }}
           DELETE_IDS: ${{ inputs.delete }}
           RESCAN_CHATS: ${{ inputs.rescan_chats }}
 

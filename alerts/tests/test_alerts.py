@@ -742,3 +742,32 @@ def test_whatsapp_ignore_list():
     cfg = Config(whatsapp_ignore=ig, include=["hiring"])
     assert run_async(run.check_whatsapp(FakeTelegram({"@b": (bot, rows)}), state, cfg, store)) == 1
     assert "zeta" in store.jobs[0]["text"].lower()
+
+
+def test_remove_latest_member():
+    from datetime import datetime, timezone
+
+    kicked, notes = [], []
+    g = SimpleNamespace(id=777, title="Job Posts", megagroup=True, forum=True, creator=True)
+    me = SimpleNamespace(id=1, is_self=True, first_name="Jatin", participant=SimpleNamespace(date=None))
+    a = SimpleNamespace(id=2, is_self=False, bot=False, first_name="Rahul", last_name=None, participant=SimpleNamespace(date=datetime(2026, 11, 20, tzinfo=timezone.utc)))
+    b = SimpleNamespace(id=3, is_self=False, bot=False, first_name="Chirag", last_name="Jain", participant=SimpleNamespace(date=datetime(2026, 11, 23, tzinfo=timezone.utc)))
+
+    class Client(FakeTelegram):
+        async def iter_participants(self, group):
+            for u in (me, a, b):
+                yield u
+
+        async def kick_participant(self, group, user):
+            kicked.append(user.first_name)
+
+        async def send_message(self, to, text, link_preview=True, reply_to=None):
+            notes.append((to, text))
+
+    state = State()
+    state.repost_gid = 777
+    cfg = Config(repost_channel="auto", repost_title="Job Posts")
+    tg = Client({"@g": (g, [])})
+    assert run_async(run.remove_member(tg, state, cfg, "latest")) == 1 and kicked == ["Chirag"]
+    assert notes[0][0] == "me" and "Chirag Jain" in notes[0][1]
+    assert run_async(run.remove_member(tg, state, cfg, "rahul")) == 1 and kicked[-1] == "Rahul"
