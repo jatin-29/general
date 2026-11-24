@@ -20,7 +20,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import (  # noqa: E402
     Config, JobStore, State, StoreLocked, fingerprint, format_alert, is_excluded, is_match, is_wa_job, load_config, make_job, parse_feed,
-    batch_match, job_category, parse_wa, repost_text, wa_signals,
+    batch_match, job_category, parse_wa, repost_text, wa_ignored, wa_signals,
 )
 
 log = logging.getLogger("alerts")
@@ -305,7 +305,8 @@ async def check_whatsapp(client, state: State, cfg: Config, store: JobStore | No
     skipped = []  # length/score only: the repo's logs are public, so never the text
     new = 0
     for m in msgs:
-        parsed = parse_wa(getattr(m, "message", None) or "")
+        raw = getattr(m, "message", None) or ""
+        parsed = None if wa_ignored(raw, cfg.whatsapp_ignore) else parse_wa(raw)
         if not parsed:
             seen["noise"] += 1
         elif not is_wa_job(parsed[1], cfg, job_group=parsed[0] in state.wa_groups):
@@ -534,6 +535,10 @@ async def run_once(cfg: Config, state: State, env: dict, dry_run: bool = False, 
             log.warning("Nothing to watch yet: add chats/channels to alerts/config.toml")
         outbox = Outbox(notify, pause=0 if dry_run else 2.0)
         total = 0
+        if store is not None and cfg.whatsapp_ignore:  # chats you chose to ignore: off the website too
+            drop = [j["id"] for j in store.jobs if j["source"].startswith("WhatsApp") and any(k.strip().lower() in j["source"].lower() for k in cfg.whatsapp_ignore if k.strip())]
+            if drop:
+                log.info("whatsapp: removed %d job(s) from ignored chats", store.delete(drop))
         before = {j["id"] for j in store.jobs} if store is not None else set()
         for ref in cfg.telegram_chats:
             try:

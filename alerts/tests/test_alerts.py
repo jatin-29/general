@@ -723,3 +723,22 @@ def test_check_linkedin_reads_new_alert_emails_once():
     assert store.jobs[-1]["apply_link"] == "https://www.linkedin.com/jobs/view/4012345678/"
     assert run.check_linkedin(env, state, Config(linkedin_alerts=True), store, imap_factory=FakeImap) == 0  # same email: nothing new
     assert run.check_linkedin({}, State(), Config(linkedin_alerts=True), store) == 0  # no secrets yet: quiet
+
+
+def test_whatsapp_ignore_list():
+    from core import wa_ignored
+
+    ig = ["chirag"]
+    assert wa_ignored("WA: Chirag Sharma || Amazon hiring SDE intern 2027 batch https://a.io/1", ig)  # his chat
+    assert wa_ignored("WA: Off Campus Jobs || Chirag: Zeta hiring SDE intern https://z.io/2", ig)  # his message in a group
+    assert wa_ignored("WA: Chirag Placement Grp (3 messages) || ~ Rahul: hiring", ig)  # a group with his name
+    assert not wa_ignored("WA: Off Campus Jobs || Rahul: Zeta hiring SDE intern https://z.io/2", ig)
+    assert not wa_ignored("WA: Chirag || hi", [])
+
+    bot = SimpleNamespace(first_name="Bot", username="b", id=77, bot=True)
+    rows = [(1, "WA: Off Campus Jobs || Chirag: Acme is hiring SDE interns, 2027 batch. Apply: https://acme.com/careers/1"),
+            (2, "WA: Off Campus Jobs || Rahul: Zeta is hiring SDE interns, 2027 batch. Apply: https://zeta.io/careers/2")]
+    store, state = JobStore(password="pw"), State()
+    cfg = Config(whatsapp_ignore=ig, include=["hiring"])
+    assert run_async(run.check_whatsapp(FakeTelegram({"@b": (bot, rows)}), state, cfg, store)) == 1
+    assert "zeta" in store.jobs[0]["text"].lower()

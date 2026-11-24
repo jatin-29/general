@@ -35,6 +35,8 @@ class Config:
     # Role types, one topic each (a job that fits none is not posted), and the batch it must mention ("" = any)
     repost_categories: list[str] = field(default_factory=lambda: ["SDE", "AI/ML", "Data Science", "Analyst", "Product"])
     repost_batch: str = ""
+    # WhatsApp chats / senders to ignore completely (part of the group name, chat name or sender), e.g. ["chirag"]
+    whatsapp_ignore: list[str] = field(default_factory=list)
     linkedin_alerts: bool = False  # read your LinkedIn job-alert emails from Gmail (needs GMAIL_ADDRESS + GMAIL_APP_PASSWORD)
     repost_recent_days: int = 1  # each day, also post the site's jobs from this many days (today = 1)
     repost_per_run: int = 15
@@ -179,6 +181,16 @@ WA_NOT_SENDER = re.compile(
     re.I,
 )
 WA_SENDER = re.compile(r"^(~\s?)?(\+?[^\W_][\w .'’()+\-]{0,39}?):\s+")  # a name or a phone number
+
+
+def wa_ignored(message: str, ignore: list[str]) -> bool:
+    """Is this WhatsApp notification from a chat or person you chose to ignore? (title, or "Name:" in front of the text)"""
+    m = WA_MARK.match(message or "")
+    if not m or not ignore:
+        return False
+    sender = WA_SENDER.match(m["text"].strip())
+    who = f"{m['title']} {sender[2] if sender else ''}".lower()
+    return any(k.strip().lower() in who for k in ignore if k.strip())
 
 
 def parse_wa(message: str) -> tuple[str, str] | None:

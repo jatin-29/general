@@ -11,6 +11,8 @@ telegram_chats = [
 # "WA: <title> || <text>"; job posts from there go to the website ("WhatsApp · <group>").
 # "auto" finds that bot chat by itself; "" turns it off.
 whatsapp_inbox = "auto"
+# WhatsApp chats or people to ignore completely (part of the group/chat name or the sender's name)
+whatsapp_ignore = ["chirag"]
 
 # Your own job group. "auto": the collector creates a private group with Topics on your account (one topic
 # per role type below, read-only for members) and sends the invite link to your Saved Messages. "" turns it off.
