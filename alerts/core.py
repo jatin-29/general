@@ -262,10 +262,22 @@ def is_sde_job(text: str) -> bool:
 
 ROLE_TYPES = {
     "Product": re.compile(r"\b(product (?:manager|management|analyst|intern|associate|owner|designer)s?|apm|associate product)\b", re.I),
-    "Data Science": re.compile(r"\b(data scien\w*|data engineer\w*)\b", re.I),
+    "Data Science": re.compile(r"\b(data scien\w*|data engineer\w*|big data|data mining|data (?:intern|internship|trainee)s?|statistician|research scientist)\b", re.I),
     "AI/ML": re.compile(r"\b(ai|ml|ai/ml|artificial intelligence|machine learning|deep learning|nlp|computer vision|gen ?ai|generative ai|llms?|mlops)\b", re.I),
     "Analyst": re.compile(r"\b(analysts?|analytics)\b", re.I),
 }
+# More role types you can add to repost_categories (each becomes its own topic in the group)
+EXTRA_ROLES = {
+    "QA/Testing": re.compile(r"\b(qa|quality assurance|sdet|testers?|(?:software|manual|automation) test\w*|test engineers?)\b", re.I),
+    "DevOps/Cloud": re.compile(r"\b(devops|sre|site reliability|cloud (?:engineer|associate|support)\w*|platform engineer\w*)\b", re.I),
+    "Cybersecurity": re.compile(r"\b(cyber ?security|security (?:engineer|analyst)s?|soc analyst|infosec|penetration test\w*|ethical hack\w*)\b", re.I),
+    "UI/UX Design": re.compile(r"\b(ui ?/ ?ux|ux|ui designer|product designer|graphic designer|visual designer)\b", re.I),
+    "Consulting": re.compile(r"\b(consultants?|consulting)\b", re.I),
+    "Core/Hardware": re.compile(r"\b(vlsi|embedded|firmware|hardware|electronics|semiconductor|mechanical|electrical|civil engineer)\w*", re.I),
+    "Finance/Quant": re.compile(r"\b(quant\w*|investment bank\w*|financial analyst|equity research|trading)\b", re.I),
+}
+ROLE_TYPES.update(EXTRA_ROLES)
+
 NOT_TECH = re.compile(r"\bbusiness development|\bbde\b|\bsales\b|telesales|marketing|\bhr\b|recruiter|real estate", re.I)
 
 

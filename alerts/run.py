@@ -467,6 +467,24 @@ async def remove_member(client, state: State, cfg: Config, who: str) -> int:
     return len(people)
 
 
+def _role_stats(jobs: list[dict], cfg: Config) -> None:
+    """Once a day: how many saved jobs for your batch fit each role type (counts only), to pick topics."""
+    from core import ROLE_TYPES
+
+    every = ["SDE", *ROLE_TYPES]
+    mine = [j for j in jobs if batch_match(j["text"], cfg.repost_batch)]
+    counts = {name: 0 for name in every}
+    none = 0
+    for j in mine:
+        c = job_category(j["text"], every)
+        if c:
+            counts[c] += 1
+        else:
+            none += 1
+    log.info("roles: %d saved job(s) for the %s batch: %s, %d no role", len(mine), cfg.repost_batch or "any",
+             ", ".join(f"{n} {k}{'' if k in cfg.repost_categories else ' (no topic)'}" for k, n in sorted(counts.items(), key=lambda x: -x[1])), none)
+
+
 def _batch_reason(text: str) -> str:
     """Why a post is not for your batch, in a few words (for the counts in the run log)."""
     from core import _FINAL_YEAR, _FOR_FRESHERS, _NEEDS_EXPERIENCE, _PRE_FINAL, batch_years
@@ -490,13 +508,14 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
 
     ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(ist).date()
-    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/3"  # bump the last part to sweep again today
+    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/4"  # bump the last part to sweep again today
     if store is not None and state.repost_today != mark:
         state.repost_today = mark
         since = today - timedelta(days=max(1, cfg.repost_recent_days) - 1)
         on_site = [j for j in reversed(store.jobs) if (j.get("posted_at") or j.get("added_at")) and
                    datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date() >= since]
         new_jobs = on_site + [j for j in new_jobs if j not in on_site]
+        _role_stats(store.jobs, cfg)
     queued = {q["id"] for q in state.repost_queue} | set(state.repost_done)
     why_batch: dict[str, int] = {}
     why = {"other source": 0, "skipped group": 0, f"not {cfg.repost_batch or 'any'} batch": 0, "other role": 0, "queued": 0}
