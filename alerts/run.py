@@ -445,10 +445,20 @@ async def remove_member(client, state: State, cfg: Config, who: str) -> int:
             continue
         name = " ".join(x for x in (getattr(u, "first_name", None), getattr(u, "last_name", None)) if x) or getattr(u, "username", None) or str(u.id)
         people.append((getattr(p, "date", None), name, u))
-    if who.strip().lower() == "latest":
+    everyone = people
+    want = who.strip().lower()
+    if want == "latest":
         people = [max(people, key=lambda x: x[0].timestamp() if x[0] else 0)] if people else []
     else:
-        people = [x for x in people if who.strip().lower() in x[1].lower()]
+        # every word must appear in the name or username ("chirag khanna" finds "Chirag K." only if both match)
+        words = want.split()
+        def hit(x):
+            hay = f"{x[1]} {getattr(x[2], 'username', None) or ''}".lower()
+            return all(w in hay for w in words) or want.replace(" ", "") in hay.replace(" ", "")
+        people = [x for x in people if hit(x)]
+        if not people:
+            names = ", ".join(n for _, n, _ in everyone) or "nobody besides admins"
+            await client.send_message("me", f"📢 No one in \"{cfg.repost_title}\" matches \"{who.strip()}\". Members now: {names}.", link_preview=False)
     for joined, name, u in people:
         await client.kick_participant(group, u)
         when = f" (joined {joined.strftime('%d %b %Y, %H:%M UTC')})" if joined else ""

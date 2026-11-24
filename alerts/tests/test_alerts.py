@@ -771,3 +771,6 @@ def test_remove_latest_member():
     assert run_async(run.remove_member(tg, state, cfg, "latest")) == 1 and kicked == ["Chirag"]
     assert notes[0][0] == "me" and "Chirag Jain" in notes[0][1]
     assert run_async(run.remove_member(tg, state, cfg, "rahul")) == 1 and kicked[-1] == "Rahul"
+    b.username = "chiragjain99"
+    assert run_async(run.remove_member(tg, state, cfg, "chirag jain")) == 1 and kicked[-1] == "Chirag"
+    assert run_async(run.remove_member(tg, state, cfg, "chirag khanna")) == 0 and "Members now" in notes[-1][1]
