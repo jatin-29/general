@@ -476,7 +476,7 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
 
     ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(ist).date()
-    mark = f"{today.isoformat()}/{cfg.repost_recent_days}"
+    mark = f"{today.isoformat()}/{cfg.repost_recent_days}/2"  # bump the last part to sweep again today
     if store is not None and state.repost_today != mark:
         state.repost_today = mark
         since = today - timedelta(days=max(1, cfg.repost_recent_days) - 1)
@@ -484,17 +484,26 @@ async def repost(client, state: State, cfg: Config, new_jobs: list[dict], store:
                    datetime.fromisoformat((j.get("posted_at") or j["added_at"]).replace("Z", "+00:00")).astimezone(ist).date() >= since]
         new_jobs = on_site + [j for j in new_jobs if j not in on_site]
     queued = {q["id"] for q in state.repost_queue} | set(state.repost_done)
+    why = {"other source": 0, "skipped group": 0, f"not {cfg.repost_batch or 'any'} batch": 0, "other role": 0, "queued": 0}
     for j in new_jobs:
         if j["id"] in queued:
             continue
         queued.add(j["id"])
         src = j["source"].strip().lower()
         group = src.split("·", 1)[-1].strip()
-        if src in skip or any(group.startswith(k) for k in skip) or (only and not any(src.startswith(o) for o in only)) or not batch_match(j["text"], cfg.repost_batch):
-            continue
-        category = job_category(j["text"], cfg.repost_categories)
-        if category:
+        if only and not any(src.startswith(o) for o in only):
+            why["other source"] += 1
+        elif src in skip or any(group.startswith(k) for k in skip):
+            why["skipped group"] += 1
+        elif not batch_match(j["text"], cfg.repost_batch):
+            why[f"not {cfg.repost_batch or 'any'} batch"] += 1
+        elif not (category := job_category(j["text"], cfg.repost_categories)):
+            why["other role"] += 1
+        else:
+            why["queued"] += 1
             state.repost_queue.append({"id": j["id"], "fingerprint": j["fingerprint"], "text": j["text"], "apply_link": j.get("apply_link"), "source": j["source"], "category": category})
+    if sum(why.values()):  # counts only: never the job text in the public log
+        log.info("repost: looked at %d job(s): %s", sum(why.values()), ", ".join(f"{n} {k}" for k, n in why.items() if n))
     if not state.repost_queue and state.repost_gid and not state.repost_title_pending(cfg.repost_title):
         return 0
     group = await find_repost_group(client, state, cfg)  # the first run makes the group right away
