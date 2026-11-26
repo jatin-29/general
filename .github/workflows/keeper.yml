@@ -1,0 +1,43 @@
+name: Keep job alerts running
+
+# Starts "Job alerts" every 15 minutes from inside GitHub, so no outside cron service is needed.
+# One keeper run lasts almost 6 hours (GitHub's limit for a job), then starts the next keeper itself.
+# The hourly schedule only matters if the chain ever stops: it starts a new keeper.
+on:
+  schedule:
+    - cron: "11 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: keeper          # only one keeper at a time; a second one waits and takes over
+  cancel-in-progress: false
+
+permissions:
+  actions: write         # to start workflows
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Start Job alerts every 15 minutes
+        run: |
+          end=$(( $(date +%s) + 345 * 60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            # skip when a run is waiting/running or one started in the last 10 minutes (manual, site button, old cron)
+            recent=$(gh run list --workflow alerts.yml --limit 5 --json status,createdAt \
+              --jq "[.[] | select(.status != \"completed\" or (now - (.createdAt | fromdateiso8601)) < 600)] | length" || echo 0)
+            if [ "${recent:-0}" = "0" ]; then
+              gh workflow run alerts.yml --ref "$BRANCH" && echo "$(date -u +%H:%M) started Job alerts" || echo "could not start Job alerts"
+            else
+              echo "$(date -u +%H:%M) Job alerts ran recently, skipping"
+            fi
+            sleep 900
+          done
+      - name: Start the next keeper
+        if: always()
+        run: gh workflow run keeper.yml --ref "$BRANCH"
